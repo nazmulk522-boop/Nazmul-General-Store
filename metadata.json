@@ -1,0 +1,6 @@
+{
+  "name": "Nazmul Telecom",
+  "description": "বিকাশ, নগদ, রকেট ওয়ালেট ও অপারেটর রিচার্জ খাতা সিস্টেম।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
