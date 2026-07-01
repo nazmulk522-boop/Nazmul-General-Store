@@ -38,9 +38,11 @@ import {
   Check,
   ShoppingBag,
   BarChart3,
-  RotateCcw
+  RotateCcw,
+  Sun,
+  Moon
 } from 'lucide-react';
-import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock } from './types';
+import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
 import { 
   initAuth, 
@@ -75,6 +77,22 @@ export default function App() {
     return saved === null ? true : saved === 'true';
   });
 
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('nazmul_telecom_dark_mode');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('nazmul_telecom_dark_mode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('nazmul_telecom_dark_mode', 'false');
+    }
+  }, [darkMode]);
+
   // State: Balances
   const [balances, setBalances] = useState<Balances>(() => {
     const saved = localStorage.getItem('nazmul_telecom_balances');
@@ -106,6 +124,101 @@ export default function App() {
       banglalink: { 19: 12, 29: 12, 39: 12, 49: 12 }
     };
   });
+
+  const [cardUnits, setCardUnits] = useState<CardUnit[]>(() => {
+    const savedUnits = localStorage.getItem('nazmul_telecom_card_units');
+    if (savedUnits) {
+      try {
+        return JSON.parse(savedUnits);
+      } catch (e) {
+        console.error("Failed to parse card units:", e);
+      }
+    }
+
+    // Migration from existing card_stock
+    const savedStock = localStorage.getItem('nazmul_telecom_card_stock');
+    let oldStock: CardStock = {
+      gp: { 19: 10, 29: 10, 39: 10, 49: 10 },
+      robi: { 19: 15, 29: 15, 39: 15, 49: 15 },
+      airtel: { 19: 8, 29: 8, 39: 8, 49: 8 },
+      banglalink: { 19: 12, 29: 12, 39: 12, 49: 12 }
+    };
+    if (savedStock) {
+      try {
+        oldStock = JSON.parse(savedStock);
+      } catch (e) {
+        console.error("Failed to parse old stock for migration:", e);
+      }
+    }
+
+    const initialUnits: CardUnit[] = [];
+    const operators: ('gp' | 'robi' | 'airtel' | 'banglalink')[] = ['gp', 'robi', 'airtel', 'banglalink'];
+    const prices: (19 | 29 | 39 | 49)[] = [19, 29, 39, 49];
+
+    operators.forEach(op => {
+      prices.forEach(pr => {
+        const qty = oldStock[op]?.[pr] ?? 0;
+        const defaultBuyPrice = pr - 0.5;
+        for (let i = 0; i < qty; i++) {
+          initialUnits.push({
+            id: `UNIT-${op}-${pr}-${Date.now()}-${Math.random().toString().slice(2, 6)}-${i}`,
+            operator: op,
+            cardPrice: pr,
+            buyPrice: defaultBuyPrice,
+            timestamp: Date.now()
+          });
+        }
+      });
+    });
+
+    return initialUnits;
+  });
+
+  const saveCardUnits = (newUnits: CardUnit[]) => {
+    setCardUnits(newUnits);
+    localStorage.setItem('nazmul_telecom_card_units', JSON.stringify(newUnits));
+
+    // Update old cardStock for backwards compatibility and rendering
+    const computedStock: CardStock = {
+      gp: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      robi: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      airtel: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      banglalink: { 19: 0, 29: 0, 39: 0, 49: 0 }
+    };
+
+    newUnits.forEach(unit => {
+      if (computedStock[unit.operator] && (unit.cardPrice === 19 || unit.cardPrice === 29 || unit.cardPrice === 39 || unit.cardPrice === 49)) {
+        computedStock[unit.operator][unit.cardPrice]++;
+      }
+    });
+
+    setCardStock(computedStock);
+    localStorage.setItem('nazmul_telecom_card_stock', JSON.stringify(computedStock));
+  };
+
+  const reconstructCardUnitsFromStock = (stock: CardStock) => {
+    const initialUnits: CardUnit[] = [];
+    const operators: ('gp' | 'robi' | 'airtel' | 'banglalink')[] = ['gp', 'robi', 'airtel', 'banglalink'];
+    const prices: (19 | 29 | 39 | 49)[] = [19, 29, 39, 49];
+
+    operators.forEach(op => {
+      prices.forEach(pr => {
+        const qty = stock[op]?.[pr] ?? 0;
+        const defaultBuyPrice = pr - 0.5;
+        for (let i = 0; i < qty; i++) {
+          initialUnits.push({
+            id: `UNIT-${op}-${pr}-${Date.now()}-${Math.random().toString().slice(2, 6)}-${i}`,
+            operator: op,
+            cardPrice: pr,
+            buyPrice: defaultBuyPrice,
+            timestamp: Date.now()
+          });
+        }
+      });
+    });
+
+    saveCardUnits(initialUnits);
+  };
 
   // State: Transactions history
   const [transactions, setTransactions] = useState<TransactionRecord[]>(() => {
@@ -299,16 +412,20 @@ export default function App() {
     localStorage.setItem('nazmul_telecom_purchases', JSON.stringify(newP));
   };
 
-  // Card stock total valuation helper
+  // Card stock total valuation helper based on actual buy prices of remaining stock
   const getCardStockValue = (operator: 'gp' | 'robi' | 'airtel' | 'banglalink'): number => {
-    const stock = cardStock[operator];
-    if (!stock) return 0;
-    return (
-      (stock[19] || 0) * 18.5 +
-      (stock[29] || 0) * 28.5 +
-      (stock[39] || 0) * 38.5 +
-      (stock[49] || 0) * 48.5
-    );
+    const operatorUnits = cardUnits.filter(u => u.operator === operator);
+    const totalVal = operatorUnits.reduce((sum, unit) => sum + unit.buyPrice, 0);
+    return Math.round(totalVal * 100) / 100;
+  };
+
+  // Helper to get oldest card buy price for a given brand and price variant
+  const getOldestCardBuyPrice = (operator: 'gp' | 'robi' | 'airtel' | 'banglalink', price: 19 | 29 | 39 | 49): number => {
+    const matchingUnits = cardUnits.filter(u => u.operator === operator && u.cardPrice === price);
+    if (matchingUnits.length > 0) {
+      return matchingUnits[0].buyPrice;
+    }
+    return price - 0.5;
   };
 
   // Get dynamic operator balance which includes SIM balance + total card stock valuation
@@ -390,9 +507,9 @@ export default function App() {
   useEffect(() => {
     if (activeAction === 'minute_card') {
       const basePrice = selectedCardPrice;
-      const accountCost = basePrice - 0.5;
+      const oldestBuyPrice = getOldestCardBuyPrice(activeAccount as 'gp' | 'robi' | 'airtel' | 'banglalink', basePrice);
       const customerReceipt = basePrice + 1.0;
-      setAmountInput(String(accountCost));
+      setAmountInput(String(oldestBuyPrice));
       setAmountReceivedInput(String(customerReceipt));
     } else if (activeAction === 'load' || activeAction === 'cash_in' || activeAction === 'pay_bill') {
       // For loads, standard amounts from account matches amount received usually
@@ -402,7 +519,7 @@ export default function App() {
       // What we given to the customer in cash is the same amount.
       setAmountReceivedInput(amountInput);
     }
-  }, [activeAction, selectedCardPrice, amountInput]);
+  }, [activeAction, selectedCardPrice, amountInput, activeAccount, cardUnits]);
 
   // Calculations for summarized metrics
   // total online balance = Sum of bKash, Nagad, Rocket, GP, Robi, Airtel, BL and card stock valuations
@@ -416,7 +533,7 @@ export default function App() {
       getOperatorTotalBalance('airtel') +
       getOperatorTotalBalance('banglalink')
     );
-  }, [balances, cardStock]);
+  }, [balances, cardUnits]);
 
   // Metrics specifically calculated for TODAY only
   const todayStart = useMemo(() => {
@@ -480,6 +597,19 @@ export default function App() {
       return;
     }
 
+    // Find card unit if active action is minute_card
+    let unitToSell: CardUnit | null = null;
+    if (activeAction === 'minute_card') {
+      const operator = activeAccount as 'gp' | 'robi' | 'airtel' | 'banglalink';
+      const matchingUnits = cardUnits.filter(u => u.operator === operator && u.cardPrice === selectedCardPrice);
+      if (matchingUnits.length === 0) {
+        setErrorMsg(`দুঃখিত, ${activeAccount.toUpperCase()} সিমে ৳${selectedCardPrice} মূল্যের মিনিট কার্ড স্টক আউট! অনুগ্রহ করে ক্রয় করে স্টক পুনরায় বৃদ্ধি করুন।`);
+        playSound(300, 0.3, 'sawtooth');
+        return;
+      }
+      unitToSell = matchingUnits[0]; // FIFO: oldest unit
+    }
+
     // Calculate commission
     let calculatedCommission = 0;
     if (activeAction === 'cash_out') {
@@ -491,7 +621,11 @@ export default function App() {
     } else if (activeAction === 'load') {
       calculatedCommission = (amt / 1000) * 27; // commission 27 Tk per 1000 (i.e. 2.7%)
     } else if (activeAction === 'minute_card') {
-      calculatedCommission = 1.5; // profit is 1.5 Tk flat per minute card
+      if (unitToSell) {
+        calculatedCommission = received - unitToSell.buyPrice;
+      } else {
+        calculatedCommission = received - (selectedCardPrice - 0.5);
+      }
     }
 
     calculatedCommission = Math.round(calculatedCommission * 100) / 100;
@@ -500,19 +634,7 @@ export default function App() {
     if (activeAction !== 'cash_out' && activeAction !== 'minute_card') {
       const availableSrcBalance = balances[activeAccount];
       if (availableSrcBalance < amt) {
-        setErrorMsg(`দুঃখিত! ${activeAccount.toUpperCase()} একাউন্টে যথেষ্ট ব্যালেন্স নেই। বর্তমান ব্যালেন্স: ৳${availableSrcBalance}`);
-        playSound(300, 0.3, 'sawtooth');
-        return;
-      }
-    }
-
-    // Check stock for minute card
-    if (activeAction === 'minute_card') {
-      const operator = activeAccount as 'gp' | 'robi' | 'airtel' | 'banglalink';
-      const operatorStock = cardStock[operator];
-      const currentStock = operatorStock ? (operatorStock[selectedCardPrice] || 0) : 0;
-      if (currentStock <= 0) {
-        setErrorMsg(`দুঃখিত, ${activeAccount.toUpperCase()} সিমে ৳${selectedCardPrice} মূল্যের মিনিট কার্ড স্টক আউট! অনুগ্রহ করে ক্রয় করে স্টক পুনরায় বৃদ্ধি করুন।`);
+        setErrorMsg(`দুঃখিত! ${activeAccount.toUpperCase()} একاون্টে যথেষ্ট ব্যালেন্স নেই। বর্তমান ব্যালেন্স: ৳${availableSrcBalance}`);
         playSound(300, 0.3, 'sawtooth');
         return;
       }
@@ -546,12 +668,10 @@ export default function App() {
       // Cash increases by amount received (received)
       updatedBalances.cash += received;
 
-      // Decrement Card Stock
-      const updatedCardStock = { ...cardStock };
-      const operator = activeAccount as 'gp' | 'robi' | 'airtel' | 'banglalink';
-      if (updatedCardStock[operator]) {
-        updatedCardStock[operator][selectedCardPrice] = Math.max(0, (updatedCardStock[operator][selectedCardPrice] || 0) - 1);
-        saveCardStock(updatedCardStock);
+      // Decrement Card Stock (Units)
+      if (unitToSell) {
+        const updatedUnits = cardUnits.filter(u => u.id !== unitToSell!.id);
+        saveCardUnits(updatedUnits);
       }
     }
 
@@ -635,11 +755,32 @@ export default function App() {
     }
 
     const { operator, price } = showCardEditModal;
-    const updatedCardStock = { ...cardStock };
-    if (updatedCardStock[operator]) {
-      updatedCardStock[operator][price] = qty;
-      saveCardStock(updatedCardStock);
+    const matchingUnits = cardUnits.filter(u => u.operator === operator && u.cardPrice === price);
+    const otherUnits = cardUnits.filter(u => !(u.operator === operator && u.cardPrice === price));
+
+    const currentCount = matchingUnits.length;
+    let updatedMatchingUnits = [...matchingUnits];
+
+    if (qty > currentCount) {
+      // Need to add (qty - currentCount) cards
+      const needed = qty - currentCount;
+      const defaultBuyPrice = price - 0.5;
+      for (let i = 0; i < needed; i++) {
+        updatedMatchingUnits.push({
+          id: `UNIT-${operator}-${price}-${Date.now()}-${Math.random().toString().slice(2, 6)}-manual-${i}`,
+          operator,
+          cardPrice: price,
+          buyPrice: defaultBuyPrice,
+          timestamp: Date.now()
+        });
+      }
+    } else if (qty < currentCount) {
+      // Need to remove (currentCount - qty) cards (remove newest first, keeping oldest in stock)
+      updatedMatchingUnits = updatedMatchingUnits.slice(0, qty);
     }
+
+    const updatedUnits = [...otherUnits, ...updatedMatchingUnits];
+    saveCardUnits(updatedUnits);
 
     playSound(880, 0.1);
     setShowCardEditModal(null);
@@ -706,10 +847,20 @@ export default function App() {
       // Deduct cash from drawer
       updatedBalances.cash -= totalCost;
 
-      // Add to Card Stock levels
-      const updatedCardStock = { ...cardStock };
-      updatedCardStock[buyCardOperator][buyCardPrice] += qty;
-      saveCardStock(updatedCardStock);
+      // Add to Card Stock levels (Units)
+      const newUnitsToAdd: CardUnit[] = [];
+      for (let i = 0; i < qty; i++) {
+        newUnitsToAdd.push({
+          id: `UNIT-${buyCardOperator}-${buyCardPrice}-${Date.now()}-${Math.random().toString().slice(2, 6)}-${i}`,
+          operator: buyCardOperator,
+          cardPrice: buyCardPrice,
+          buyPrice: pricePerCard,
+          timestamp: Date.now()
+        });
+      }
+
+      const updatedUnits = [...cardUnits, ...newUnitsToAdd];
+      saveCardUnits(updatedUnits);
 
       const newPurchase: PurchaseRecord = {
         id: `PUR-${Date.now().toString().slice(-5)}`,
@@ -792,6 +943,7 @@ export default function App() {
         transactions,
         purchases,
         cardStock,
+        cardUnits,
         commissionOffset,
         volumeOffset,
         timestamp: Date.now()
@@ -830,7 +982,11 @@ export default function App() {
       }
 
       if (backupData.balances) saveBalances(backupData.balances);
-      if (backupData.cardStock) saveCardStock(backupData.cardStock);
+      if (backupData.cardUnits) {
+        saveCardUnits(backupData.cardUnits);
+      } else if (backupData.cardStock) {
+        reconstructCardUnitsFromStock(backupData.cardStock);
+      }
       if (backupData.transactions) saveTransactions(backupData.transactions);
       if (backupData.purchases) savePurchases(backupData.purchases);
       
@@ -964,7 +1120,11 @@ export default function App() {
         const data = JSON.parse(event.target?.result as string);
         if (data.balances && data.transactions && data.cardStock) {
           saveBalances(data.balances);
-          saveCardStock(data.cardStock);
+          if (data.cardUnits) {
+            saveCardUnits(data.cardUnits);
+          } else {
+            reconstructCardUnitsFromStock(data.cardStock);
+          }
           saveTransactions(data.transactions);
           if (data.purchases) savePurchases(data.purchases);
           alert('অভিনন্দন! আপনার ব্যাকআপ ডাটা সফলভাবে টেলিকমে পুনরুদ্ধার করা হয়েছে।');
@@ -986,6 +1146,7 @@ export default function App() {
       transactions,
       purchases,
       cardStock,
+      cardUnits,
       timestamp: Date.now()
     }, null, 2));
     const dlAnchorElem = document.createElement('a');
@@ -1026,10 +1187,18 @@ export default function App() {
         
         const operator = txn.accountKey as 'gp' | 'robi' | 'airtel' | 'banglalink';
         const price = txn.cardPrice as 19 | 29 | 39 | 49;
-        if (updatedCardStock[operator]) {
-          updatedCardStock[operator][price] = (updatedCardStock[operator][price] || 0) + 1;
-          saveCardStock(updatedCardStock);
-        }
+        const buyPrice = txn.amountReceived - txn.commission;
+
+        const returnedUnit: CardUnit = {
+          id: `UNIT-${operator}-${price}-${Date.now()}-reverted-${Math.random().toString().slice(2, 6)}`,
+          operator,
+          cardPrice: price,
+          buyPrice: buyPrice || (price - 0.5),
+          timestamp: Date.now()
+        };
+
+        const updatedUnits = [returnedUnit, ...cardUnits];
+        saveCardUnits(updatedUnits);
       }
 
       saveBalances(updatedBalances);
@@ -1081,6 +1250,15 @@ export default function App() {
             >
               {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
               <span>{soundEnabled ? "শব্দ সক্রিয়" : "বধির মোড"}</span>
+            </button>
+
+            <button 
+              onClick={() => { setDarkMode(!darkMode); playSound(880, 0.05); }}
+              className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-bold transition-all ${darkMode ? 'bg-indigo-950/80 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
+              title={darkMode ? "লাইট মোড চালু করুন" : "ডার্ক মোড চালু করুন"}
+            >
+              {darkMode ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-indigo-300" />}
+              <span>{darkMode ? "লাইট মোড" : "ডার্ক মোড"}</span>
             </button>
           </div>
         </div>

@@ -49,6 +49,14 @@ export interface CardStock {
   banglalink: { 19: number; 29: number; 39: number; 49: number };
 }
 
+export interface CardUnit {
+  id: string;
+  operator: 'gp' | 'robi' | 'airtel' | 'banglalink';
+  cardPrice: 19 | 29 | 39 | 49;
+  buyPrice: number;
+  timestamp: number;
+}
+
 // Operators definitions for data compatibility
 export type OperatorId = 'gp' | 'robi' | 'banglalink' | 'airtel' | 'teletalk';
 
