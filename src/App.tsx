@@ -452,6 +452,8 @@ export default function App() {
   const [bakiActionType, setBakiActionType] = useState<'due' | 'payment'>('payment');
   const [bakiFormAmount, setBakiFormAmount] = useState<string>('');
   const [bakiFormNote, setBakiFormNote] = useState<string>('');
+  const [editingBakiCustomer, setEditingBakiCustomer] = useState<{ id: string; name: string; phone: string } | null>(null);
+  const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
 
   // Form Inputs: Manual Card Stock Edit
   const [showCardEditModal, setShowCardEditModal] = useState<{
@@ -970,6 +972,38 @@ export default function App() {
     setBakiFormAmount('');
     setBakiFormNote('');
     playSound(1200, 0.15, 'sine');
+  };
+
+  // Update Customer Info (Name and Phone) in Baki Khata
+  const handleUpdateTelecomCustomer = (customerId: string, name: string, phone: string) => {
+    if (!name.trim()) {
+      alert('গ্রাহকের নাম অবশ্যই দিতে হবে!');
+      return;
+    }
+    const updated = telecomCustomers.map(cust => {
+      if (cust.id === customerId) {
+        return {
+          ...cust,
+          name: name.trim(),
+          phone: phone.trim()
+        };
+      }
+      return cust;
+    });
+    saveTelecomCustomers(updated);
+    setEditingBakiCustomer(null);
+    playSound(1100, 0.1, 'sine');
+  };
+
+  // Delete Customer from Baki Khata
+  const handleDeleteTelecomCustomer = (customerId: string) => {
+    const updated = telecomCustomers.filter(cust => cust.id !== customerId);
+    saveTelecomCustomers(updated);
+    if (selectedBakiCustomerId === customerId) {
+      setSelectedBakiCustomerId(null);
+    }
+    setShowDeleteConfirmId(null);
+    playSound(800, 0.15, 'sawtooth');
   };
 
   // Direct manual card stock adjustments
@@ -3020,17 +3054,130 @@ export default function App() {
 
                     return (
                       <div className="space-y-4">
-                        {/* Selected Customer Header Banner */}
-                        <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/20 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-left">
-                          <div>
-                            <h4 className="font-extrabold text-sm md:text-base text-slate-800">{customer.name}</h4>
-                            <p className="text-xs text-slate-400 font-medium">মোবাইল: {customer.phone || 'N/A'}</p>
+                        {/* Selected Customer Header Banner / Edit Form */}
+                        {editingBakiCustomer && editingBakiCustomer.id === customer.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleUpdateTelecomCustomer(customer.id, editingBakiCustomer.name, editingBakiCustomer.phone);
+                            }}
+                            className="p-4 bg-amber-50/40 border border-amber-200 rounded-2xl space-y-3 text-left"
+                          >
+                            <span className="text-[11px] font-black text-amber-800 uppercase block">✏️ গ্রাহকের তথ্য পরিবর্তন (Edit Customer Info)</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">গ্রাহকের নাম:</label>
+                                <input
+                                  type="text"
+                                  value={editingBakiCustomer.name}
+                                  onChange={(e) => setEditingBakiCustomer({ ...editingBakiCustomer, name: e.target.value })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:ring-1 focus:ring-amber-400 focus:outline-none"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">মোবাইল নম্বর:</label>
+                                <input
+                                  type="tel"
+                                  value={editingBakiCustomer.phone}
+                                  onChange={(e) => setEditingBakiCustomer({ ...editingBakiCustomer, phone: e.target.value })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold font-mono focus:ring-1 focus:ring-amber-400 focus:outline-none"
+                                  placeholder="মোবাইল নম্বর"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingBakiCustomer(null);
+                                  playSound(900, 0.05);
+                                }}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                              >
+                                বাতিল করুন
+                              </button>
+                              <button
+                                type="submit"
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1"
+                              >
+                                <Check size={12} />
+                                সেভ করুন
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/20 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-left">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h4 className="font-extrabold text-sm md:text-base text-slate-800">{customer.name}</h4>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => {
+                                      setEditingBakiCustomer({ id: customer.id, name: customer.name, phone: customer.phone });
+                                      playSound(1000, 0.05);
+                                    }}
+                                    className="p-1 hover:bg-slate-200 text-slate-500 hover:text-amber-600 rounded-md transition-colors cursor-pointer"
+                                    title="গ্রাহকের নাম বা ফোন এডিট করুন"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowDeleteConfirmId(customer.id);
+                                      playSound(1000, 0.05);
+                                    }}
+                                    className="p-1 hover:bg-slate-200 text-slate-500 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
+                                    title="গ্রাহকের খাতা ডিলিট করুন"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-400 font-medium">মোবাইল: {customer.phone || 'N/A'}</p>
+                            </div>
+                            <div className="text-right sm:border-l sm:pl-4 border-slate-200 min-w-[120px]">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">চলতি বকেয়া (Current Due)</span>
+                              <strong className="text-2xl font-black text-rose-600 font-mono">৳{customer.due}</strong>
+                            </div>
                           </div>
-                          <div className="text-right sm:border-l sm:pl-4 border-slate-200">
-                            <span className="text-[10px] text-slate-400 font-bold block uppercase">চলতি বকেয়া (Current Due)</span>
-                            <strong className="text-2xl font-black text-rose-600 font-mono">৳{customer.due}</strong>
+                        )}
+
+                        {/* Delete Confirmation Card */}
+                        {showDeleteConfirmId === customer.id && (
+                          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-left space-y-3">
+                            <h4 className="font-extrabold text-xs md:text-sm text-rose-800 flex items-center gap-1.5">
+                              ⚠️ সতর্কবার্তা: কাস্টমার খাতা ডিলিট করুন
+                            </h4>
+                            <p className="text-xs text-rose-700 leading-relaxed">
+                              আপনি কি নিশ্চিত যে আপনি <strong>{customer.name}</strong>-এর খাতাটি স্থায়ীভাবে মুছে ফেলতে চান? গ্রাহকের সমস্ত পূর্ববর্তী বকেয়া এবং জমা পরিশোধের হিসাব মুছে যাবে!
+                              {customer.due > 0 && (
+                                <span className="block mt-1 font-bold">
+                                  🚨 গ্রাহকের নিকট এখনো ৳{customer.due} টাকা বকেয়া বাকি আছে!
+                                </span>
+                              )}
+                            </p>
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => {
+                                  setShowDeleteConfirmId(null);
+                                  playSound(900, 0.05);
+                                }}
+                                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                              >
+                                বাতিল করুন
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDeleteTelecomCustomer(customer.id);
+                                }}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                              >
+                                নিশ্চিত মুছুন
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Payment & Manual Due Entry Block */}
                         <div className="p-4 rounded-2xl border border-indigo-150 bg-indigo-50/20 border-indigo-200 text-left space-y-3">
