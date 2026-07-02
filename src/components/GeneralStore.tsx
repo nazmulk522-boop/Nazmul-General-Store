@@ -163,27 +163,36 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map((p: any) => ({
-            id: p.id || Math.random().toString(36).substring(2, 11),
-            name: p.name || 'অজানা পণ্য',
-            buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
-            sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
-            stock: typeof p.stock === 'number' ? p.stock : 0
-          }));
+          const sanitized = parsed.map((p: any) => {
+            const bPrice = Number(p.buyPrice !== undefined ? p.buyPrice : (p.buy !== undefined ? p.buy : 0)) || 0;
+            const sPrice = Number(p.sellPrice !== undefined ? p.sellPrice : (p.sell !== undefined ? p.sell : 0)) || 0;
+            return {
+              id: p.id || Math.random().toString(36).substring(2, 11),
+              name: p.name || 'অজানা পণ্য',
+              buyPrice: bPrice,
+              buy: bPrice,
+              sellPrice: sPrice,
+              sell: sPrice,
+              stock: Number(p.stock ?? 0) || 0
+            };
+          });
+          // Save back clean data to localStorage so it doesn't stay corrupted
+          localStorage.setItem('nazmul_store_products', JSON.stringify(sanitized));
+          return sanitized;
         }
       } catch (e) { /* ignore */ }
     }
     // Seeds
     return [
-      { id: 'p1', name: 'জিরাস চিপস (ছোট)', buyPrice: 4.38, sellPrice: 5.00, stock: 27 },
-      { id: 'p2', name: 'জিরাস চিপস (বড়)', buyPrice: 8.00, sellPrice: 10.00, stock: 21 },
-      { id: 'p3', name: 'বোম্বে চিপস', buyPrice: 8.00, sellPrice: 10.00, stock: 7 },
-      { id: 'p4', name: 'রিং চিপস', buyPrice: 8.00, sellPrice: 10.00, stock: 37 },
-      { id: 'p5', name: 'মাইটি চিপস', buyPrice: 8.25, sellPrice: 10.00, stock: 0 },
-      { id: 'p6', name: 'প্রান ডাউল ভাজা', buyPrice: 4.00, sellPrice: 5.00, stock: 19 },
-      { id: 'p7', name: 'আরকু চানাচুর', buyPrice: 4.00, sellPrice: 5.00, stock: 15 },
-      { id: 'p8', name: 'পাইন এ্যাপেল বিস্কুট', buyPrice: 4.00, sellPrice: 5.00, stock: 10 },
-      { id: 'p9', name: 'মিল্ক প্লাস বিস্কুট', buyPrice: 8.50, sellPrice: 10.00, stock: 10 }
+      { id: 'p1', name: 'জিরাস চিপস (ছোট)', buyPrice: 4.38, buy: 4.38, sellPrice: 5.00, sell: 5.00, stock: 27 },
+      { id: 'p2', name: 'জিরাস চিপস (বড়)', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 21 },
+      { id: 'p3', name: 'বোম্বে চিপস', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 7 },
+      { id: 'p4', name: 'রিং চিপস', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 37 },
+      { id: 'p5', name: 'মাইটি চিপস', buyPrice: 8.25, buy: 8.25, sellPrice: 10.00, sell: 10.00, stock: 0 },
+      { id: 'p6', name: 'প্রান ডাউল ভাজা', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 19 },
+      { id: 'p7', name: 'আরকু চানাচুর', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 15 },
+      { id: 'p8', name: 'পাইন এ্যাপেল বিস্কুট', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 10 },
+      { id: 'p9', name: 'মিল্ক প্লাস বিস্কুট', buyPrice: 8.50, buy: 8.50, sellPrice: 10.00, sell: 10.00, stock: 10 }
     ];
   });
 
@@ -272,11 +281,11 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
   const todayStr = getTodayDateString();
 
   const todaySales = sales.filter(s => s.date === todayStr);
-  const totalSalesToday = todaySales.reduce((acc, curr) => acc + curr.grandTotal, 0);
-  const totalProfitToday = todaySales.reduce((acc, curr) => acc + curr.profit, 0);
+  const totalSalesToday = todaySales.reduce((acc, curr) => acc + (curr.grandTotal || 0), 0);
+  const totalProfitToday = todaySales.reduce((acc, curr) => acc + (curr.profit || 0), 0);
 
-  const totalItemsInStock = products.reduce((acc, curr) => acc + curr.stock, 0);
-  const totalStockValueBuy = products.reduce((acc, curr) => acc + (curr.stock * curr.buyPrice), 0);
+  const totalItemsInStock = products.reduce((acc, curr) => acc + (curr.stock || 0), 0);
+  const totalStockValueBuy = products.reduce((acc, curr) => acc + ((curr.stock || 0) * (curr.buyPrice || 0)), 0);
 
   // Low stock alert list
   const lowStockProducts = products.filter(p => p.stock <= 5);
@@ -373,7 +382,7 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
 
     if (editingProduct) {
       // Edit
-      const updated = products.map(p => p.id === editingProduct.id ? { ...p, name: prodName, buyPrice: bPrice, sellPrice: sPrice, stock: stk } : p);
+      const updated = products.map(p => p.id === editingProduct.id ? { ...p, name: prodName, buyPrice: bPrice, buy: bPrice, sellPrice: sPrice, sell: sPrice, stock: stk } : p);
       saveProducts(updated);
       playSound(900, 0.1);
     } else {
@@ -382,7 +391,9 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         id: 'PROD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         name: prodName,
         buyPrice: bPrice,
+        buy: bPrice,
         sellPrice: sPrice,
+        sell: sPrice,
         stock: stk
       };
       saveProducts([...products, newProd]);
@@ -842,11 +853,15 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
     if (existingProd) {
       const updated = products.map(p => {
         if (p.id === existingProd.id) {
+          const newBuyPrice = pCost / pQty;
+          const newSellPrice = sPrice || p.sellPrice;
           return {
             ...p,
             stock: p.stock + pQty,
-            buyPrice: pCost / pQty,
-            sellPrice: sPrice || p.sellPrice
+            buyPrice: newBuyPrice,
+            buy: newBuyPrice,
+            sellPrice: newSellPrice,
+            sell: newSellPrice
           };
         }
         return p;
@@ -855,11 +870,14 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
     } else {
       // Prompt to create new product? Or do it silently
       if (sPrice) {
+        const newBuyPrice = pCost / pQty;
         const newP: StoreProduct = {
           id: 'PROD-' + Date.now(),
           name: purchaseProdName.trim(),
-          buyPrice: pCost / pQty,
+          buyPrice: newBuyPrice,
+          buy: newBuyPrice,
           sellPrice: sPrice,
+          sell: sPrice,
           stock: pQty
         };
         saveProducts([...products, newP]);
@@ -1017,13 +1035,19 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         const parsed = JSON.parse(e.target?.result as string);
         if (parsed.products && parsed.customers) {
           if (confirm("সতর্কতা! আপনি কি ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত মুদিখানা তথ্য প্রতিস্থাপিত হবে।")) {
-            const sanitized = (parsed.products || []).map((p: any) => ({
-              id: p.id || Math.random().toString(36).substring(2, 11),
-              name: p.name || 'অজানা পণ্য',
-              buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
-              sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
-              stock: typeof p.stock === 'number' ? p.stock : 0
-            }));
+            const sanitized = (parsed.products || []).map((p: any) => {
+              const bPrice = Number(p.buyPrice !== undefined ? p.buyPrice : (p.buy !== undefined ? p.buy : 0)) || 0;
+              const sPrice = Number(p.sellPrice !== undefined ? p.sellPrice : (p.sell !== undefined ? p.sell : 0)) || 0;
+              return {
+                id: p.id || Math.random().toString(36).substring(2, 11),
+                name: p.name || 'অজানা পণ্য',
+                buyPrice: bPrice,
+                buy: bPrice,
+                sellPrice: sPrice,
+                sell: sPrice,
+                stock: Number(p.stock ?? 0) || 0
+              };
+            });
             saveProducts(sanitized);
             saveCustomers(parsed.customers || []);
             saveSales(parsed.sales || []);
@@ -1034,6 +1058,62 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
             }
             playSound(1250, 0.4, 'sine');
             alert("সফলভাবে ব্যাকআপ ফাইল রিস্টোর সম্পন্ন হয়েছে!");
+          }
+        } else if (parsed.products || Array.isArray(parsed)) {
+          // Fallback to stock-only merge flow automatically for user convenience
+          let importedProducts: any[] = [];
+          if (Array.isArray(parsed)) {
+            importedProducts = parsed;
+          } else if (parsed && Array.isArray(parsed.products)) {
+            importedProducts = parsed.products;
+          }
+
+          if (importedProducts.length > 0 && confirm("এটি একটি শুধু স্টক ব্যাকআপ ফাইল। আপনি কি এই ফাইলের পণ্য ও স্টক আপনার বর্তমান তালিকার সাথে যোগ (Merge) করতে চান?")) {
+            const updatedProducts = [...products];
+
+            importedProducts.forEach((imp: any) => {
+              const impId = imp.id;
+              const impName = (imp.name || '').trim();
+              const buyVal = Number(imp.buyPrice !== undefined ? imp.buyPrice : (imp.buy !== undefined ? imp.buy : 0)) || 0;
+              const sellVal = Number(imp.sellPrice !== undefined ? imp.sellPrice : (imp.sell !== undefined ? imp.sell : 0)) || 0;
+              const stockVal = Number(imp.stock ?? 0) || 0;
+
+              if (!impName) return;
+
+              let existingIndex = -1;
+              if (impId) {
+                existingIndex = updatedProducts.findIndex(p => p.id === impId);
+              }
+              if (existingIndex === -1) {
+                existingIndex = updatedProducts.findIndex(p => p.name.trim().toLowerCase() === impName.toLowerCase());
+              }
+
+              if (existingIndex > -1) {
+                const existing = updatedProducts[existingIndex];
+                updatedProducts[existingIndex] = {
+                  ...existing,
+                  stock: existing.stock + stockVal,
+                  buyPrice: buyVal || existing.buyPrice,
+                  buy: buyVal || existing.buyPrice,
+                  sellPrice: sellVal || existing.sellPrice,
+                  sell: sellVal || existing.sellPrice
+                };
+              } else {
+                updatedProducts.push({
+                  id: impId || 'PROD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                  name: impName,
+                  buyPrice: buyVal,
+                  buy: buyVal,
+                  sellPrice: sellVal,
+                  sell: sellVal,
+                  stock: stockVal
+                });
+              }
+            });
+
+            saveProducts(updatedProducts);
+            playSound(1250, 0.4, 'sine');
+            alert("সফলভাবে স্টক ব্যাকআপ ফাইল ইমপোর্ট ও স্টক যোগ করা সম্পন্ন হয়েছে!");
           }
         } else {
           alert("ভুল ব্যাকআপ ফরম্যাট! সঠিক নাজমুল জেনারেল স্টোর ফাইল সিলেক্ট করুন।");
@@ -1074,7 +1154,7 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
     fileReader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target?.result as string);
-        let importedProducts: StoreProduct[] = [];
+        let importedProducts: any[] = [];
         if (Array.isArray(parsed)) {
           importedProducts = parsed;
         } else if (parsed && Array.isArray(parsed.products)) {
@@ -1084,17 +1164,52 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
           return;
         }
 
-        if (confirm("সতর্কতা! আপনি কি শুধু স্টক ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত পণ্যের নাম, দাম ও স্টক প্রতিস্থাপিত হবে (বিক্রয় ও কাস্টমার হিসাব অপরিবর্তিত থাকবে)।")) {
-          const sanitized = importedProducts.map((p: any) => ({
-            id: p.id || Math.random().toString(36).substring(2, 11),
-            name: p.name || 'অজানা পণ্য',
-            buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
-            sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
-            stock: typeof p.stock === 'number' ? p.stock : 0
-          }));
-          saveProducts(sanitized);
+        if (confirm("আপনি কি স্টক ব্যাকআপ ফাইলটি ইমপোর্ট করতে চান? বর্তমান পণ্যের সাথে নতুন স্টক যোগ (Merge) হবে এবং নতুন কোনো পণ্য থাকলে তা তালিকায় যুক্ত হবে।")) {
+          const updatedProducts = [...products];
+
+          importedProducts.forEach((imp: any) => {
+            const impId = imp.id;
+            const impName = (imp.name || '').trim();
+            const buyVal = Number(imp.buyPrice !== undefined ? imp.buyPrice : (imp.buy !== undefined ? imp.buy : 0)) || 0;
+            const sellVal = Number(imp.sellPrice !== undefined ? imp.sellPrice : (imp.sell !== undefined ? imp.sell : 0)) || 0;
+            const stockVal = Number(imp.stock ?? 0) || 0;
+
+            if (!impName) return;
+
+            let existingIndex = -1;
+            if (impId) {
+              existingIndex = updatedProducts.findIndex(p => p.id === impId);
+            }
+            if (existingIndex === -1) {
+              existingIndex = updatedProducts.findIndex(p => p.name.trim().toLowerCase() === impName.toLowerCase());
+            }
+
+            if (existingIndex > -1) {
+              const existing = updatedProducts[existingIndex];
+              updatedProducts[existingIndex] = {
+                ...existing,
+                stock: existing.stock + stockVal,
+                buyPrice: buyVal || existing.buyPrice,
+                buy: buyVal || existing.buyPrice,
+                sellPrice: sellVal || existing.sellPrice,
+                sell: sellVal || existing.sellPrice
+              };
+            } else {
+              updatedProducts.push({
+                id: impId || 'PROD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                name: impName,
+                buyPrice: buyVal,
+                buy: buyVal,
+                sellPrice: sellVal,
+                sell: sellVal,
+                stock: stockVal
+              });
+            }
+          });
+
+          saveProducts(updatedProducts);
           playSound(1250, 0.4, 'sine');
-          alert("সফলভাবে শুধু স্টক ব্যাকআপ ফাইল রিস্টোর সম্পন্ন হয়েছে!");
+          alert("সফলভাবে স্টক ব্যাকআপ ফাইল ইমপোর্ট ও স্টক যোগ করা সম্পন্ন হয়েছে!");
         }
       } catch (err) {
         alert("স্টক ফাইল পড়তে সমস্যা হয়েছে!");
@@ -1549,8 +1664,8 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                     .map(p => (
                       <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                         <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">{p.name}</td>
-                        <td className="py-3.5 px-4 font-mono">৳{toBnNum(p.buyPrice.toFixed(2))}</td>
-                        <td className="py-3.5 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">৳{toBnNum(p.sellPrice.toFixed(2))}</td>
+                        <td className="py-3.5 px-4 font-mono">৳{toBnNum((p.buyPrice || 0).toFixed(2))}</td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">৳{toBnNum((p.sellPrice || 0).toFixed(2))}</td>
                         <td className="py-3.5 px-4 text-center">
                           <span className={`px-2.5 py-1 font-mono font-bold rounded-full ${p.stock <= 5 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 animate-pulse' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
                             {toBnNum(p.stock)}

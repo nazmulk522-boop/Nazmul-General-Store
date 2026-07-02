@@ -91,6 +91,8 @@ export interface StoreProduct {
   buyPrice: number;
   sellPrice: number;
   stock: number;
+  buy?: number;
+  sell?: number;
 }
 
 export interface StoreSaleItem {
