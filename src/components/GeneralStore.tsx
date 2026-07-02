@@ -160,7 +160,18 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
   const [products, setProducts] = useState<StoreProduct[]>(() => {
     const saved = localStorage.getItem('nazmul_store_products');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((p: any) => ({
+            id: p.id || Math.random().toString(36).substring(2, 11),
+            name: p.name || 'অজানা পণ্য',
+            buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
+            sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
+            stock: typeof p.stock === 'number' ? p.stock : 0
+          }));
+        }
+      } catch (e) { /* ignore */ }
     }
     // Seeds
     return [
@@ -1006,7 +1017,14 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         const parsed = JSON.parse(e.target?.result as string);
         if (parsed.products && parsed.customers) {
           if (confirm("সতর্কতা! আপনি কি ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত মুদিখানা তথ্য প্রতিস্থাপিত হবে।")) {
-            saveProducts(parsed.products || []);
+            const sanitized = (parsed.products || []).map((p: any) => ({
+              id: p.id || Math.random().toString(36).substring(2, 11),
+              name: p.name || 'অজানা পণ্য',
+              buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
+              sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
+              stock: typeof p.stock === 'number' ? p.stock : 0
+            }));
+            saveProducts(sanitized);
             saveCustomers(parsed.customers || []);
             saveSales(parsed.sales || []);
             saveDailyLedgers(parsed.dailyLedgers || []);
@@ -1067,7 +1085,14 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         }
 
         if (confirm("সতর্কতা! আপনি কি শুধু স্টক ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত পণ্যের নাম, দাম ও স্টক প্রতিস্থাপিত হবে (বিক্রয় ও কাস্টমার হিসাব অপরিবর্তিত থাকবে)।")) {
-          saveProducts(importedProducts);
+          const sanitized = importedProducts.map((p: any) => ({
+            id: p.id || Math.random().toString(36).substring(2, 11),
+            name: p.name || 'অজানা পণ্য',
+            buyPrice: typeof p.buyPrice === 'number' ? p.buyPrice : (typeof p.buy === 'number' ? p.buy : 0),
+            sellPrice: typeof p.sellPrice === 'number' ? p.sellPrice : (typeof p.sell === 'number' ? p.sell : 0),
+            stock: typeof p.stock === 'number' ? p.stock : 0
+          }));
+          saveProducts(sanitized);
           playSound(1250, 0.4, 'sine');
           alert("সফলভাবে শুধু স্টক ব্যাকআপ ফাইল রিস্টোর সম্পন্ন হয়েছে!");
         }
