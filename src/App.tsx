@@ -2224,7 +2224,7 @@ export default function App() {
                   {/* Visual calculator of baki amount */}
                   <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg border border-indigo-100 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-200 font-medium flex justify-between items-center">
                     <span>বাকি হিসাবের খাতায় জমা হবে:</span>
-                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono text-sm">৳{Math.max(0, (activeAction === 'minute_card' ? selectedCardPrice : (parseFloat(amountInput) || 0)) - (parseFloat(amountReceivedInput) || 0)).toFixed(2)}</strong>
+                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono text-sm">৳{Math.max(0, (activeAction === 'minute_card' ? (selectedCardPrice + 1) : (parseFloat(amountInput) || 0)) - (parseFloat(amountReceivedInput) || 0)).toFixed(2)}</strong>
                   </div>
                 </div>
               )}
