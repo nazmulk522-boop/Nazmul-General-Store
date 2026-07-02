@@ -147,3 +147,21 @@ export interface StoreDailyLedger {
   manualCash?: number;
 }
 
+export interface TelecomCustomerTxn {
+  id: string;
+  type: 'due' | 'payment';
+  amount: number;
+  date: string;
+  note?: string;
+  timestamp: number;
+  transactionId?: string;
+}
+
+export interface TelecomCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  due: number;
+  transactions: TelecomCustomerTxn[];
+}
+

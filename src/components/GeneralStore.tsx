@@ -1033,9 +1033,10 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
     fileReader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target?.result as string);
-        if (parsed.products && parsed.customers) {
+        if (parsed.products && (parsed.customers || parsed.credit)) {
           if (confirm("সতর্কতা! আপনি কি ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত মুদিখানা তথ্য প্রতিস্থাপিত হবে।")) {
-            const sanitized = (parsed.products || []).map((p: any) => {
+            // 1. Sanitize products
+            const sanitizedProducts = (parsed.products || []).map((p: any) => {
               const bPrice = Number(p.buyPrice !== undefined ? p.buyPrice : (p.buy !== undefined ? p.buy : 0)) || 0;
               const sPrice = Number(p.sellPrice !== undefined ? p.sellPrice : (p.sell !== undefined ? p.sell : 0)) || 0;
               return {
@@ -1048,14 +1049,123 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                 stock: Number(p.stock ?? 0) || 0
               };
             });
-            saveProducts(sanitized);
-            saveCustomers(parsed.customers || []);
-            saveSales(parsed.sales || []);
-            saveDailyLedgers(parsed.dailyLedgers || []);
+
+            // 2. Sanitize customers (credit in old format)
+            const rawCustomers = parsed.customers || parsed.credit || [];
+            const sanitizedCustomers = rawCustomers.map((c: any) => {
+              const mappedTxns = (c.transactions || []).map((t: any) => {
+                let mappedType: 'sale_due' | 'payment_received' = 'sale_due';
+                if (t.type === 'payment_received' || t.type === 'payment') {
+                  mappedType = 'payment_received';
+                } else if (t.type === 'sale_due' || t.type === 'credit') {
+                  mappedType = 'sale_due';
+                }
+                return {
+                  id: t.id || Math.random().toString(36).substring(2, 11),
+                  type: mappedType,
+                  amount: Number(t.amount) || 0,
+                  date: t.date || getTodayDateString(),
+                  note: t.note || '',
+                  timestamp: Number(t.timestamp) || Date.now()
+                };
+              });
+
+              // Re-calculate due amount
+              const dueAmount = mappedTxns.reduce((sum: number, tx: any) => {
+                if (tx.type === 'sale_due') {
+                  return sum + tx.amount;
+                } else {
+                  return sum - tx.amount;
+                }
+              }, 0);
+
+              return {
+                id: c.id || Math.random().toString(36).substring(2, 11),
+                name: c.name || 'অজানা কাস্টমার',
+                phone: c.phone || '',
+                due: dueAmount,
+                transactions: mappedTxns
+              };
+            });
+
+            // 3. Sanitize sales
+            const sanitizedSales = (parsed.sales || []).map((s: any) => {
+              const mappedItems = (s.items || []).map((it: any) => {
+                const prodId = it.productId;
+                const prod = (parsed.products || []).find((p: any) => p.id === prodId);
+                const pName = it.name || (prod ? prod.name : 'অজানা পণ্য');
+                const pBuyPrice = Number(it.buyPrice !== undefined ? it.buyPrice : (it.buy !== undefined ? it.buy : (prod ? (prod.buyPrice || prod.buy || 0) : 0)));
+                const pSellPrice = Number(it.sellPrice !== undefined ? it.sellPrice : (it.unitPrice !== undefined ? it.unitPrice : (it.sell !== undefined ? it.sell : (prod ? (prod.sellPrice || prod.sell || 0) : 0))));
+                const pQty = Number(it.quantity !== undefined ? it.quantity : (it.qty !== undefined ? it.qty : 0));
+
+                return {
+                  productId: prodId,
+                  name: pName,
+                  buyPrice: pBuyPrice,
+                  sellPrice: pSellPrice,
+                  quantity: pQty
+                };
+              });
+
+              const grandTotal = Number(s.grandTotal !== undefined ? s.grandTotal : (s.total !== undefined ? s.total : 0));
+              const profit = Number(s.profit !== undefined ? s.profit : 0);
+              
+              let normalizedPayment: 'Cash' | 'Due' | 'Mobile Banking' = 'Cash';
+              const rawPayment = (s.paymentMethod || '').toLowerCase();
+              if (rawPayment === 'due' || rawPayment === 'credit' || rawPayment === 'baki') {
+                normalizedPayment = 'Due';
+              } else if (rawPayment === 'bkash' || rawPayment === 'nagad' || rawPayment === 'mobile_banking' || rawPayment === 'mobile banking') {
+                normalizedPayment = 'Mobile Banking';
+              }
+
+              return {
+                id: s.id || Math.random().toString(36).substring(2, 11),
+                customerName: s.customerName || 'Unknown',
+                paymentMethod: normalizedPayment,
+                date: s.date || getTodayDateString(),
+                timestamp: Number(s.timestamp) || Date.now(),
+                items: mappedItems,
+                grandTotal: grandTotal,
+                profit: profit
+              };
+            });
+
+            // 4. Sanitize Daily Ledgers (hisab in old format)
+            let sanitizedLedgers: any[] = [];
+            if (parsed.dailyLedgers) {
+              sanitizedLedgers = parsed.dailyLedgers;
+            } else if (parsed.hisab && typeof parsed.hisab === 'object') {
+              sanitizedLedgers = Object.keys(parsed.hisab).map((dateKey) => {
+                const h = parsed.hisab[dateKey];
+                const purchasesMapped = (h.purchaseItems || []).map((pi: any) => {
+                  return {
+                    id: pi.id || Math.random().toString(36).substring(2, 11),
+                    productName: pi.name || 'অজানা পণ্য',
+                    qty: Number(pi.qty) || 0,
+                    purchaseAmount: Number(pi.amount) || 0,
+                    sellPrice: Number(pi.sellPrice) || 0,
+                    timestamp: h.timestamp || Date.now()
+                  };
+                });
+                return {
+                  date: h.date || dateKey,
+                  closeCash: h.closeCash !== undefined ? (h.closeCash !== null ? Number(h.closeCash) : null) : null,
+                  purchases: purchasesMapped,
+                  manualCash: Number(h.manualCash) || 0
+                };
+              });
+            }
+
+            saveProducts(sanitizedProducts);
+            saveCustomers(sanitizedCustomers);
+            saveSales(sanitizedSales);
+            saveDailyLedgers(sanitizedLedgers);
+
             if (parsed.pin) {
               setPin(parsed.pin);
               localStorage.setItem('nazmul_store_pin', parsed.pin);
             }
+
             playSound(1250, 0.4, 'sine');
             alert("সফলভাবে ব্যাকআপ ফাইল রিস্টোর সম্পন্ন হয়েছে!");
           }

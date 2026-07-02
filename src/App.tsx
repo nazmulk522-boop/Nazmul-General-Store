@@ -43,7 +43,7 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit } from './types';
+import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit, TelecomCustomer, TelecomCustomerTxn } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
 import GeneralStore from './components/GeneralStore';
 import { 
@@ -373,6 +373,57 @@ export default function App() {
     return [];
   });
 
+  // State: Telecom Customers (Baki/Credit Ledger)
+  const [telecomCustomers, setTelecomCustomers] = useState<TelecomCustomer[]>(() => {
+    const saved = localStorage.getItem('nazmul_telecom_customers');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* use default */ }
+    }
+    // Seeds for telecom customers to give a nice starting experience
+    return [
+      {
+        id: 'T-CUST-1',
+        name: 'সেতু ভাই',
+        phone: '01715888222',
+        due: 120,
+        transactions: [
+          {
+            id: 'T-TX-1',
+            type: 'due',
+            amount: 120,
+            date: '2026-07-01',
+            note: 'ফ্লেক্সিলোড বাকি',
+            timestamp: Date.now() - 1000 * 60 * 60 * 24
+          }
+        ]
+      },
+      {
+        id: 'T-CUST-2',
+        name: 'মিজান কাকা',
+        phone: '01305445229',
+        due: 0,
+        transactions: [
+          {
+            id: 'T-TX-2',
+            type: 'due',
+            amount: 50,
+            date: '2026-07-01',
+            note: 'মিনিট কার্ড',
+            timestamp: Date.now() - 1000 * 60 * 60 * 12
+          },
+          {
+            id: 'T-TX-3',
+            type: 'payment',
+            amount: 50,
+            date: '2026-07-01',
+            note: 'জমা পরিশোধ',
+            timestamp: Date.now() - 1000 * 60 * 60 * 10
+          }
+        ]
+      }
+    ];
+  });
+
   // General App State
   const [activeAccount, setActiveAccount] = useState<AccountKey>('bkash');
   const [activeAction, setActiveAction] = useState<TransactionActionType>('cash_out');
@@ -384,6 +435,9 @@ export default function App() {
   const [amountReceivedInput, setAmountReceivedInput] = useState<string>('');
   const [trxId, setTrxId] = useState<string>('');
   const [note, setNote] = useState<string>('');
+  const [isTelecomDue, setIsTelecomDue] = useState<boolean>(false);
+  const [selectedTelecomCustomerId, setSelectedTelecomCustomerId] = useState<string>('new');
+  const [newTelecomCustomerName, setNewTelecomCustomerName] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -423,6 +477,12 @@ export default function App() {
   const [buyCardCostInput, setBuyCardCostInput] = useState<string>('18.5');
   const [buySuccessMsg, setBuySuccessMsg] = useState<string | null>(null);
 
+  // Form Inputs: Telecom Baki / Credit Ledger
+  const [selectedBakiCustomerId, setSelectedBakiCustomerId] = useState<string | null>(null);
+  const [bakiActionType, setBakiActionType] = useState<'due' | 'payment'>('payment');
+  const [bakiFormAmount, setBakiFormAmount] = useState<string>('');
+  const [bakiFormNote, setBakiFormNote] = useState<string>('');
+
   // Form Inputs: Manual Card Stock Edit
   const [showCardEditModal, setShowCardEditModal] = useState<{
     operator: 'gp' | 'robi' | 'airtel' | 'banglalink';
@@ -436,7 +496,7 @@ export default function App() {
   }, [buyCardPrice]);
 
   // UI state
-  const [dashboardTab, setDashboardTab] = useState<'statement' | 'buy' | 'backup'>('statement');
+  const [dashboardTab, setDashboardTab] = useState<'statement' | 'buy' | 'backup' | 'baki'>('statement');
   const [statementFilter, setStatementFilter] = useState<'all' | 'daily' | 'monthly'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedSlip, setSelectedSlip] = useState<TransactionRecord | null>(null);
@@ -508,6 +568,11 @@ export default function App() {
   const savePurchases = (newP: PurchaseRecord[]) => {
     setPurchases(newP);
     localStorage.setItem('nazmul_telecom_purchases', JSON.stringify(newP));
+  };
+
+  const saveTelecomCustomers = (newC: TelecomCustomer[]) => {
+    setTelecomCustomers(newC);
+    localStorage.setItem('nazmul_telecom_customers', JSON.stringify(newC));
   };
 
   // Card stock total valuation helper based on actual buy prices of remaining stock
@@ -777,8 +842,9 @@ export default function App() {
     saveBalances(updatedBalances);
 
     // Save transaction
+    const txnRefId = `TXN-${Date.now().toString().slice(-6)}`;
     const newTransaction: TransactionRecord = {
-      id: `TXN-${Date.now().toString().slice(-6)}`,
+      id: txnRefId,
       accountKey: activeAccount,
       actionType: activeAction,
       cardPrice: activeAction === 'minute_card' ? selectedCardPrice : undefined,
@@ -792,6 +858,46 @@ export default function App() {
     };
 
     saveTransactions([newTransaction, ...transactions]);
+
+    // Handle telecom credit/due (baki) system
+    const expectedVal = activeAction === 'minute_card' ? selectedCardPrice : amt;
+    const dueAmount = expectedVal - received;
+    if (isTelecomDue && dueAmount > 0) {
+      let updatedCustomers = [...telecomCustomers];
+      const newTxn: TelecomCustomerTxn = {
+        id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        type: 'due',
+        amount: dueAmount,
+        date: new Date().toISOString().split('T')[0],
+        note: `বাকিতে ${activeAction === 'load' ? 'ফ্লেক্সিলোড' : activeAction === 'minute_card' ? 'মিনিট কার্ড' : activeAction === 'cash_in' ? 'ক্যাশ ইন' : activeAction === 'pay_bill' ? 'পে বিল' : activeAction} (${activeAccount.toUpperCase()})` + (note.trim() ? `: ${note.trim()}` : ''),
+        timestamp: Date.now(),
+        transactionId: txnRefId
+      };
+
+      if (selectedTelecomCustomerId === 'new') {
+        const newCustName = newTelecomCustomerName.trim() || 'নতুন গ্রাহক';
+        const newCust: TelecomCustomer = {
+          id: `T-CUST-${Date.now()}`,
+          name: newCustName,
+          phone: clientPhone === 'N/A' ? '' : clientPhone,
+          due: dueAmount,
+          transactions: [newTxn]
+        };
+        updatedCustomers = [newCust, ...updatedCustomers];
+      } else {
+        updatedCustomers = updatedCustomers.map(cust => {
+          if (cust.id === selectedTelecomCustomerId) {
+            return {
+              ...cust,
+              due: cust.due + dueAmount,
+              transactions: [newTxn, ...cust.transactions]
+            };
+          }
+          return cust;
+        });
+      }
+      saveTelecomCustomers(updatedCustomers);
+    }
 
     // Success signals
     playSound(1200, 0.15, 'sine');
@@ -807,6 +913,9 @@ export default function App() {
     setAmountReceivedInput('');
     setTrxId('');
     setNote('');
+    setIsTelecomDue(false);
+    setNewTelecomCustomerName('');
+    setSelectedTelecomCustomerId('new');
   };
 
   // Direct manual balance adjustments
@@ -839,6 +948,51 @@ export default function App() {
     playSound(880, 0.1);
     setShowEditModal(null);
     setEditAmountVal('');
+  };
+
+  // Telecom Credit/Baki Payment & Due Submit Handler
+  const handleTelecomBakiSubmit = (e: FormEvent, customerId: string) => {
+    e.preventDefault();
+    const amt = parseFloat(bakiFormAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('দয়া করে সঠিক টাকার পরিমাণ লিখুন!');
+      return;
+    }
+
+    const updatedCustomers = telecomCustomers.map(cust => {
+      if (cust.id === customerId) {
+        const diff = bakiActionType === 'due' ? amt : -amt;
+        const newDue = Math.max(0, cust.due + diff);
+
+        const newTxn: TelecomCustomerTxn = {
+          id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          type: bakiActionType,
+          amount: amt,
+          date: new Date().toISOString().split('T')[0],
+          note: bakiFormNote.trim() || (bakiActionType === 'payment' ? 'জমা পরিশোধ' : 'নতুন বাকি'),
+          timestamp: Date.now()
+        };
+
+        return {
+          ...cust,
+          due: newDue,
+          transactions: [newTxn, ...cust.transactions]
+        };
+      }
+      return cust;
+    });
+
+    // If it's a cash payment received, increase the Cash balance
+    if (bakiActionType === 'payment') {
+      const updatedBalances = { ...balances };
+      updatedBalances.cash += amt;
+      saveBalances(updatedBalances);
+    }
+
+    saveTelecomCustomers(updatedCustomers);
+    setBakiFormAmount('');
+    setBakiFormNote('');
+    playSound(1200, 0.15, 'sine');
   };
 
   // Direct manual card stock adjustments
@@ -1986,6 +2140,71 @@ export default function App() {
               />
             </div>
 
+            {/* Telecom Credit/Due (Baki) section */}
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isTelecomDue}
+                  onChange={(e) => {
+                    setIsTelecomDue(e.target.checked);
+                    playSound(1000, 0.05);
+                  }}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                />
+                <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase">
+                  বাকিতে লেনদেন (Baki/Due Transaction)?
+                </span>
+              </label>
+
+              {isTelecomDue && (
+                <div className="space-y-2.5 pt-1.5 border-t border-slate-200 dark:border-slate-800 animate-fadeIn">
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">
+                      বাকির খাতার কাস্টমার নির্বাচন করুন:
+                    </label>
+                    <select
+                      value={selectedTelecomCustomerId}
+                      onChange={(e) => {
+                        setSelectedTelecomCustomerId(e.target.value);
+                        playSound(1000, 0.05);
+                      }}
+                      className="w-full bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="new">+ নতুন কাস্টমার যোগ করুন</option>
+                      {telecomCustomers.map(cust => (
+                        <option key={cust.id} value={cust.id}>
+                          {cust.name} {cust.phone ? `(${cust.phone})` : ''} - বাকি: ৳{cust.due}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedTelecomCustomerId === 'new' && (
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">
+                        নতুন কাস্টমারের নাম:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="যেমন: রহিম কাকা, মাসুদ ভাই"
+                        value={newTelecomCustomerName}
+                        onChange={(e) => setNewTelecomCustomerName(e.target.value)}
+                        className="w-full bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        required={isTelecomDue}
+                      />
+                    </div>
+                  )}
+
+                  {/* Visual calculator of baki amount */}
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg border border-indigo-100 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-200 font-medium flex justify-between items-center">
+                    <span>বাকি হিসাবের খাতায় জমা হবে:</span>
+                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono text-sm">৳{Math.max(0, (activeAction === 'minute_card' ? selectedCardPrice : (parseFloat(amountInput) || 0)) - (parseFloat(amountReceivedInput) || 0)).toFixed(2)}</strong>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Alerts */}
             {errorMsg && (
               <div className="p-3 bg-red-50 text-red-900 border border-red-200 rounded-xl text-xs flex items-center gap-2">
@@ -2041,6 +2260,13 @@ export default function App() {
             >
               <CloudUpload size={15} />
               রিপোর্ট, এক্সপোর্ট ও ক্লাউড
+            </button>
+            <button
+              onClick={() => { setDashboardTab('baki'); playSound(920, 0.05); }}
+              className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${dashboardTab === 'baki' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Wallet size={15} />
+              বাকি খাতা (Due Ledger)
             </button>
           </div>
 
@@ -2678,6 +2904,256 @@ export default function App() {
                       className="hidden"
                     />
                   </label>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* Tab 4: Telecom Credit/Due (Baki) Ledger */}
+          {dashboardTab === 'baki' && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-6">
+              <div className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-extrabold text-sm md:text-base text-slate-800">টেলিকম বাকি খাতা ও কাস্টমার লেজার</h3>
+                  <p className="text-xs text-slate-400">বাকিতে দেওয়া ফ্লেক্সিলোড ও মিনিট কার্ডের হিসাব, জমা পরিশোধ এবং বিস্তারিত রিপোর্ট খাতা</p>
+                </div>
+                {/* Visual indicator of total outstanding due */}
+                <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2 self-start shadow-2xs text-right">
+                  <span className="text-[10px] text-rose-500 font-extrabold block uppercase">সর্বমোট বকেয়া (Total Outstanding)</span>
+                  <strong className="text-xl font-black text-rose-600 font-mono">৳{telecomCustomers.reduce((sum, c) => sum + c.due, 0).toFixed(2)}</strong>
+                </div>
+              </div>
+
+              {/* Baki Ledger Workspace */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Left side: Customer selection / search */}
+                <div className="lg:col-span-5 space-y-3">
+                  <div className="text-xs font-black text-slate-500 uppercase tracking-wider block text-left">গ্রাহকদের তালিকা:</div>
+                  
+                  {/* Customer list container */}
+                  <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1">
+                    {telecomCustomers.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400 text-xs">
+                        কোনো বাকি কাস্টমার রেকর্ড নেই।
+                      </div>
+                    ) : (
+                      telecomCustomers.map(cust => {
+                        const isSelected = selectedBakiCustomerId === cust.id;
+                        return (
+                          <div
+                            key={cust.id}
+                            onClick={() => {
+                              setSelectedBakiCustomerId(cust.id);
+                              playSound(1000, 0.05);
+                            }}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer text-left ${isSelected ? 'bg-indigo-50/55 border-indigo-200 ring-2 ring-indigo-500/10' : 'bg-slate-50 hover:bg-slate-100 border-slate-200'}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-extrabold text-slate-800 text-xs sm:text-sm">{cust.name}</h4>
+                                <p className="text-[10px] font-mono text-slate-400 font-bold">{cust.phone || 'N/A'}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className={`text-xs font-black font-mono block ${cust.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  ৳{cust.due}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium">বকেয়া</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Manual add customer helper form */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.target as HTMLFormElement;
+                      const nameInput = form.elements.namedItem('custName') as HTMLInputElement;
+                      const phoneInput = form.elements.namedItem('custPhone') as HTMLInputElement;
+                      const name = nameInput.value.trim();
+                      const phone = phoneInput.value.trim();
+                      
+                      if (!name) return;
+
+                      // Check if already exists
+                      if (telecomCustomers.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                        alert('এই নামের কাস্টমার ইতিমধ্যে রয়েছে!');
+                        return;
+                      }
+
+                      const newCust: TelecomCustomer = {
+                        id: `T-CUST-${Date.now()}`,
+                        name,
+                        phone,
+                        due: 0,
+                        transactions: []
+                      };
+
+                      saveTelecomCustomers([newCust, ...telecomCustomers]);
+                      setSelectedBakiCustomerId(newCust.id);
+                      form.reset();
+                      playSound(1200, 0.15, 'sine');
+                    }}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-left"
+                  >
+                    <span className="text-[10px] font-black text-slate-500 uppercase block">+ নতুন গ্রাহক খাতা খুলুন:</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        name="custName"
+                        placeholder="গ্রাহকের নাম"
+                        className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                        required
+                      />
+                      <input
+                        type="tel"
+                        name="custPhone"
+                        placeholder="মোবাইল (ঐচ্ছিক)"
+                        className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      কাস্টমার খাতা সেভ করুন
+                    </button>
+                  </form>
+                </div>
+
+                {/* Right side: Selected Customer Detailed Statement & Payment Action */}
+                <div className="lg:col-span-7 space-y-4">
+                  {selectedBakiCustomerId ? (() => {
+                    const customer = telecomCustomers.find(c => c.id === selectedBakiCustomerId);
+                    if (!customer) return <div className="text-center py-12 text-slate-400 text-xs">গ্রাহকটি খুঁজে পাওয়া যায়নি।</div>;
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Selected Customer Header Banner */}
+                        <div className="p-4 bg-gradient-to-r from-slate-50 to-indigo-50/20 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-left">
+                          <div>
+                            <h4 className="font-extrabold text-sm md:text-base text-slate-800">{customer.name}</h4>
+                            <p className="text-xs text-slate-400 font-medium">মোবাইল: {customer.phone || 'N/A'}</p>
+                          </div>
+                          <div className="text-right sm:border-l sm:pl-4 border-slate-200">
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase">চলতি বকেয়া (Current Due)</span>
+                            <strong className="text-2xl font-black text-rose-600 font-mono">৳{customer.due}</strong>
+                          </div>
+                        </div>
+
+                        {/* Payment & Manual Due Entry Block */}
+                        <div className="p-4 rounded-2xl border border-indigo-150 bg-indigo-50/20 border-indigo-200 text-left space-y-3">
+                          <span className="text-[11px] font-black text-indigo-750 uppercase block">নতুন জমা বা বাকি এন্ট্রি (Record Payment / New Due):</span>
+                          
+                          <form onSubmit={(e) => handleTelecomBakiSubmit(e, customer.id)} className="space-y-3">
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div>
+                                <label className="block text-[9px] font-extrabold text-slate-500 uppercase mb-1">লেনদেনের ধরণ:</label>
+                                <select
+                                  value={bakiActionType}
+                                  onChange={(e) => {
+                                    setBakiActionType(e.target.value as 'due' | 'payment');
+                                    playSound(1000, 0.05);
+                                  }}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                                >
+                                  <option value="payment">জমা পরিশোধ (Cash In)</option>
+                                  <option value="due">নতুন বকেয়া (Due Out)</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-extrabold text-slate-500 uppercase mb-1">টাকার পরিমাণ (Amount):</label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="৳ পরিমাণ"
+                                    value={bakiFormAmount}
+                                    onChange={(e) => setBakiFormAmount(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 pl-5 text-xs font-extrabold font-mono"
+                                    required
+                                  />
+                                  <span className="absolute left-1.5 top-2 text-slate-400 text-xs font-bold">৳</span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-extrabold text-slate-500 uppercase mb-1">বিবরণ (Note):</label>
+                                <input
+                                  type="text"
+                                  placeholder="যেমন: জমা পরিশোধ"
+                                  value={bakiFormNote}
+                                  onChange={(e) => setBakiFormNote(e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Check size={14} />
+                              নিশ্চিত করুন ও খাতা আপডেট করুন
+                            </button>
+                          </form>
+                        </div>
+
+                        {/* Customer Transaction Statements List */}
+                        <div className="space-y-2 text-left">
+                          <span className="text-xs font-black text-slate-500 uppercase tracking-wider block">গ্রাহকের পূর্ববর্তী হিসাব বিবরণী:</span>
+                          
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 font-sans">
+                            {customer.transactions.length === 0 ? (
+                              <div className="text-center py-6 text-slate-400 text-xs">
+                                কোনো লেনদেনের ইতিহাস নেই।
+                              </div>
+                            ) : (
+                              customer.transactions.map(txn => {
+                                const isDue = txn.type === 'due';
+                                return (
+                                  <div
+                                    key={txn.id}
+                                    className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex justify-between items-center text-xs"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <div className={`p-2 rounded-full ${isDue ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                        <Wallet size={14} />
+                                      </div>
+                                      <div>
+                                        <h5 className="font-extrabold text-slate-800">{txn.note || (isDue ? 'বাকিতে লেনদেন' : 'জমা পরিশোধ')}</h5>
+                                        <p className="text-[10px] text-slate-400 font-medium">
+                                          {formatDateTimeBangla(txn.timestamp)}
+                                          {txn.transactionId && ` | ভাউচার আইডি: ${txn.transactionId}`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`font-mono font-black text-xs md:text-sm ${isDue ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        {isDue ? '+' : '-'} ৳{txn.amount}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })() : (
+                    <div className="h-full border border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center py-16 text-slate-400 space-y-2">
+                      <Wallet size={36} className="text-slate-300 animate-pulse" />
+                      <p className="text-xs font-bold">অনুগ্রহ করে বাম পাশের তালিকা থেকে কাস্টমার নির্বাচন করুন।</p>
+                      <p className="text-[10px] text-slate-400">তার বিস্তারিত খাতা ও পূর্ববর্তী বিবরণ এখানে প্রদর্শিত হবে।</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
