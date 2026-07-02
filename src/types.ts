@@ -83,3 +83,65 @@ export interface RechargePackage {
   commissionRate: number;
   ussdCode?: string;
 }
+
+// --- GENERAL STORE TYPES ---
+export interface StoreProduct {
+  id: string;
+  name: string;
+  buyPrice: number;
+  sellPrice: number;
+  stock: number;
+}
+
+export interface StoreSaleItem {
+  productId: string;
+  name: string;
+  buyPrice: number;
+  sellPrice: number;
+  quantity: number;
+}
+
+export interface StoreSale {
+  id: string;
+  customerName: string;
+  paymentMethod: 'Cash' | 'Due' | 'Mobile Banking';
+  date: string; // YYYY-MM-DD
+  timestamp: number;
+  items: StoreSaleItem[];
+  grandTotal: number;
+  profit: number;
+}
+
+export interface StoreCustomerTxn {
+  id: string;
+  type: 'sale_due' | 'payment_received';
+  amount: number;
+  date: string;
+  note?: string;
+  timestamp: number;
+}
+
+export interface StoreCustomer {
+  id: string;
+  name: string;
+  phone?: string;
+  due: number;
+  transactions: StoreCustomerTxn[];
+}
+
+export interface StorePurchase {
+  id: string;
+  productName: string;
+  qty: number;
+  purchaseAmount: number; // Cost of purchase (cash minus)
+  sellPrice?: number;     // Optional new sell price
+  timestamp: number;
+}
+
+export interface StoreDailyLedger {
+  date: string; // YYYY-MM-DD
+  closeCash: number | null;
+  purchases: StorePurchase[];
+  manualCash?: number;
+}
+

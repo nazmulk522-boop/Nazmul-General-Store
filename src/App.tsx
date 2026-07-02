@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
+import GeneralStore from './components/GeneralStore';
 import { 
   initAuth, 
   googleSignIn, 
@@ -71,6 +72,12 @@ function formatDateTimeBangla(timestamp: number): string {
 }
 
 export default function App() {
+  // App Mode State: telecom vs general_store
+  const [appMode, setAppMode] = useState<'telecom' | 'general_store'>(() => {
+    const saved = localStorage.getItem('nazmul_app_mode');
+    return saved === 'general_store' ? 'general_store' : 'telecom';
+  });
+
   // Sound toggle
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('nazmul_telecom_sound');
@@ -1222,9 +1229,45 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-pink-100 antialiased text-slate-800">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-pink-100 antialiased text-slate-800 dark:bg-slate-950 dark:text-slate-100">
       
-      {/* 1. Header Banner & Sound control */}
+      {/* Top Multi-Store Mode Switcher */}
+      <div className="bg-slate-950 text-white border-b border-slate-800 sticky top-0 z-50 shadow-md">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center py-2 sm:h-16 gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🏪</span>
+            <div>
+              <span className="font-extrabold tracking-tight text-sm sm:text-base text-slate-100 block sm:inline">নাজমুল মাল্টি-স্টোর</span>
+              <span className="text-[10px] sm:ml-2 font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-md font-bold">MULTI v2.5</span>
+            </div>
+          </div>
+          
+          <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800/80 shadow-inner w-full sm:w-auto">
+            <button
+              onClick={() => { setAppMode('telecom'); playSound(1000, 0.1); }}
+              className={`flex-1 sm:flex-initial px-5 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'telecom' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+            >
+              <span>📱</span> টেলিকম রিচার্জ
+            </button>
+            <button
+              onClick={() => { setAppMode('general_store'); playSound(1200, 0.1); }}
+              className={`flex-1 sm:flex-initial px-5 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'general_store' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+            >
+              <span>🏪</span> জেনারেল স্টোর
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {appMode === 'general_store' ? (
+        <GeneralStore 
+          soundEnabled={soundEnabled} 
+          playSound={playSound}
+          onSwitchToTelecom={() => { setAppMode('telecom'); playSound(1000, 0.1); }}
+        />
+      ) : (
+        <>
+          {/* 1. Header Banner & Sound control */}
       <header id="app_header" className="bg-slate-900 text-white shadow-md border-b-2 border-indigo-500 py-5 px-4 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -2823,6 +2866,9 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+        </>
+      )}
 
     </div>
   );
