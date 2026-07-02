@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, FormEvent, ChangeEvent } from 'react';
+import html2canvas from 'html2canvas';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Store, 
@@ -70,6 +71,96 @@ function formatDateTimeBangla(timestamp: number): string {
   const dateStr = date.toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' });
   return `${dateStr}, ${timeStr}`;
 }
+
+// Thermal printing element helper using hidden iframe
+export const printElement = (elementId: string) => {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'absolute';
+  iframe.style.width = '0px';
+  iframe.style.height = '0px';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+  
+  const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+  if (!iframeDoc) return;
+  
+  iframeDoc.open();
+  iframeDoc.write(`
+    <html>
+      <head>
+        <title>Receipt</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+          body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 10px;
+            color: #000;
+            background: #fff;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          .no-print { display: none !important; }
+          .text-slate-900 { color: #000 !important; }
+          .text-slate-600 { color: #333 !important; }
+          .text-indigo-600 { color: #000 !important; }
+          .bg-slate-50 { background: #f9fafb !important; border: 1px solid #ddd !important; }
+          .bg-indigo-50 { background: #f3f4f6 !important; }
+          .border-dashed { border-style: dashed !important; }
+          .border-slate-300 { border-color: #000 !important; }
+        </style>
+        <script src="https://cdn.tailwindcss.com"><\/script>
+      </head>
+      <body>
+        <div class="p-4" style="max-width: 320px; margin: 0 auto;">
+          ${element.innerHTML}
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+              setTimeout(function() {
+                window.parent.document.body.removeChild(window.frameElement);
+              }, 500);
+            }, 500);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  iframeDoc.close();
+};
+
+// Download element as PNG helper using html2canvas
+export const downloadPNG = async (elementId: string, filename: string) => {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  try {
+    const canvas = await html2canvas(element, {
+      scale: 2, // High resolution
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+    });
+    
+    const image = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = image;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error("Failed to generate PNG:", err);
+    alert("PNG ছবি তৈরিতে ত্রুটি হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+  }
+};
 
 export default function App() {
   // App Mode State: telecom vs general_store
@@ -2610,82 +2701,85 @@ export default function App() {
               className="bg-white rounded-3xl overflow-hidden max-w-[340px] w-full border border-slate-100 shadow-2xl p-5 space-y-4"
             >
               
-              {/* Paper Top Receipt Badge */}
-              <div className="text-center font-sans space-y-1">
-                <div className="text-indigo-600 bg-indigo-50 w-11 h-11 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                  <ReceiptText size={20} />
-                </div>
-                <h4 className="font-black text-base text-slate-900 tracking-tight">নাজমুল টেলিকম (মেমো স্লিপ)</h4>
-                <p className="text-[10px] text-slate-400 font-medium">ভাউচার রসিদ আইডি: {selectedSlip.id}</p>
-              </div>
-
-              {/* Details stack */}
-              <div className="bg-slate-50 rounded-2xl p-3.5 text-xs text-slate-600 space-y-2 border border-slate-200/55">
-                <div className="flex justify-between">
-                  <span>গ্রাহকের নম্বর:</span>
-                  <strong className="font-mono text-slate-900 text-sm tracking-wide">{selectedSlip.phone}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>তারিখ ও সময়:</span>
-                  <span className="font-medium text-slate-700">{formatDateTimeBangla(selectedSlip.timestamp)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>লেনদেনের মাধ্যম:</span>
-                  <strong className="font-bold uppercase text-indigo-700">{selectedSlip.accountKey}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>কাজের ধরণ:</span>
-                  <strong className="font-extrabold text-slate-800">{translateActionType(selectedSlip.actionType, selectedSlip.cardPrice)}</strong>
-                </div>
-                
-                {selectedSlip.trxId && (
-                  <div className="flex justify-between border-t border-slate-200/70 pt-1.5 mt-1.5">
-                    <span>Transaction ID:</span>
-                    <strong className="font-mono text-indigo-600 uppercase font-bold">{selectedSlip.trxId}</strong>
+              {/* Receipt Content wrapper for PNG capture and Print */}
+              <div id="telecom-receipt-card" className="bg-white p-2">
+                {/* Paper Top Receipt Badge */}
+                <div className="text-center font-sans space-y-1">
+                  <div className="text-indigo-600 bg-indigo-50 w-11 h-11 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <ReceiptText size={20} />
                   </div>
-                )}
-
-                {selectedSlip.note && (
-                  <div className="flex justify-between border-t border-slate-200/70 pt-1.5 mt-1.5 text-[10px] text-slate-400">
-                    <span>মন্তব্য / নোটিফিকেশন:</span>
-                    <span className="italic">{selectedSlip.note}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Core Financial Block */}
-              <div className="border-y-2 border-dashed border-slate-300 py-3.5 text-center px-2 space-y-1">
-                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block">আদায়কৃত ক্যাশ টাকা</span>
-                <strong className="text-3xl font-black text-indigo-950 font-mono tracking-tight block">
-                  ৳{toBengaliNumber(selectedSlip.amountReceived)}
-                </strong>
-                <span className="text-[9px] text-indigo-500 font-bold block bg-indigo-50 py-0.5 rounded-full px-2 max-w-max mx-auto select-none">
-                  * সফলভাবে ট্র্যাকিং ডেটায় সংরক্ষিত
-                </span>
-              </div>
-
-              {/* Barcode Mock */}
-              <div className="flex flex-col items-center justify-center select-none pt-1">
-                <div className="h-7 w-44 bg-slate-800 flex items-center justify-center rounded overflow-hidden opacity-90 mb-1 relative bg-white border border-slate-200">
-                  <div className="absolute inset-x-2 inset-y-1 flex justify-between">
-                    <div className="bg-black w-1.5 h-full" />
-                    <div className="bg-black w-0.5 h-full" />
-                    <div className="bg-black w-1 h-full" />
-                    <div className="bg-black w-2 h-full" />
-                    <div className="bg-black w-0.5 h-full" />
-                    <div className="bg-black w-1.5 h-full" />
-                    <div className="bg-black w-0.5 h-full" />
-                    <div className="bg-black w-1.5 h-full" />
-                    <div className="bg-black w-2 h-full" />
-                    <div className="bg-black w-1 h-full" />
-                    <div className="bg-black w-0.5 h-full" />
-                    <div className="bg-black w-1.5 h-full" />
-                  </div>
+                  <h4 className="font-black text-base text-slate-900 tracking-tight">নাজমুল টেলিকম (মেমো স্লিপ)</h4>
+                  <p className="text-[10px] text-slate-400 font-medium">ভাউচার রসিদ আইডি: {selectedSlip.id}</p>
                 </div>
-                <span className="text-[9px] text-slate-400 font-mono tracking-wider">REF-{selectedSlip.id}</span>
+
+                {/* Details stack */}
+                <div className="bg-slate-50 rounded-2xl p-3.5 text-xs text-slate-600 space-y-2 border border-slate-200/55 mt-3">
+                  <div className="flex justify-between">
+                    <span>গ্রাহকের নম্বর:</span>
+                    <strong className="font-mono text-slate-900 text-sm tracking-wide">{selectedSlip.phone}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>তারিখ ও সময়:</span>
+                    <span className="font-medium text-slate-700">{formatDateTimeBangla(selectedSlip.timestamp)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>লেনদেনের মাধ্যম:</span>
+                    <strong className="font-bold uppercase text-indigo-700">{selectedSlip.accountKey}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>কাজের ধরণ:</span>
+                    <strong className="font-extrabold text-slate-800">{translateActionType(selectedSlip.actionType, selectedSlip.cardPrice)}</strong>
+                  </div>
+                  
+                  {selectedSlip.trxId && (
+                    <div className="flex justify-between border-t border-slate-200/70 pt-1.5 mt-1.5">
+                      <span>Transaction ID:</span>
+                      <strong className="font-mono text-indigo-600 uppercase font-bold">{selectedSlip.trxId}</strong>
+                    </div>
+                  )}
+
+                  {selectedSlip.note && (
+                    <div className="flex justify-between border-t border-slate-200/70 pt-1.5 mt-1.5 text-[10px] text-slate-400">
+                      <span>মন্তব্য / নোটিফিকেশন:</span>
+                      <span className="italic">{selectedSlip.note}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Core Financial Block */}
+                <div className="border-y-2 border-dashed border-slate-300 py-3.5 text-center px-2 space-y-1 mt-3">
+                  <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block">আদায়কৃত ক্যাশ টাকা</span>
+                  <strong className="text-3xl font-black text-indigo-950 font-mono tracking-tight block">
+                    ৳{toBengaliNumber(selectedSlip.amountReceived)}
+                  </strong>
+                  <span className="text-[9px] text-indigo-500 font-bold block bg-indigo-50 py-0.5 rounded-full px-2 max-w-max mx-auto select-none">
+                    * সফলভাবে ট্র্যাকিং ডেটায় সংরক্ষিত
+                  </span>
+                </div>
+
+                {/* Barcode Mock */}
+                <div className="flex flex-col items-center justify-center select-none pt-2">
+                  <div className="h-7 w-44 bg-slate-800 flex items-center justify-center rounded overflow-hidden opacity-90 mb-1 relative bg-white border border-slate-200">
+                    <div className="absolute inset-x-2 inset-y-1 flex justify-between">
+                      <div className="bg-black w-1.5 h-full" />
+                      <div className="bg-black w-0.5 h-full" />
+                      <div className="bg-black w-1 h-full" />
+                      <div className="bg-black w-2 h-full" />
+                      <div className="bg-black w-0.5 h-full" />
+                      <div className="bg-black w-1.5 h-full" />
+                      <div className="bg-black w-0.5 h-full" />
+                      <div className="bg-black w-1.5 h-full" />
+                      <div className="bg-black w-2 h-full" />
+                      <div className="bg-black w-1 h-full" />
+                      <div className="bg-black w-0.5 h-full" />
+                      <div className="bg-black w-1.5 h-full" />
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-mono tracking-wider">REF-{selectedSlip.id}</span>
+                </div>
               </div>
 
-              {/* Close and copy tools trigger */}
+              {/* Close and tool utilities grid */}
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                 <button
                   onClick={() => {
@@ -2694,14 +2788,34 @@ export default function App() {
                     alert('মেমো স্লিপ কপি সম্পন্ন হয়েছে!');
                     playSound(1300, 0.1);
                   }}
-                  className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  <Copy size={13} />
+                  <Copy size={12} />
                   কপি মেমো
                 </button>
                 <button
+                  onClick={() => {
+                    playSound(950, 0.1);
+                    downloadPNG('telecom-receipt-card', `telecom_memo_${selectedSlip.id}.png`);
+                  }}
+                  className="py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <ArrowDownToLine size={12} />
+                  ডাউনলোড PNG
+                </button>
+                <button
+                  onClick={() => {
+                    playSound(1100, 0.1);
+                    printElement('telecom-receipt-card');
+                  }}
+                  className="py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Printer size={12} />
+                  থার্মাল প্রিন্ট
+                </button>
+                <button
                   onClick={() => { setSelectedSlip(null); playSound(650, 0.08); }}
-                  className="py-2.5 bg-indigo-650 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow transition-all flex items-center justify-center"
+                  className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl cursor-pointer shadow transition-all flex items-center justify-center"
                 >
                   বন্ধ করুন
                 </button>

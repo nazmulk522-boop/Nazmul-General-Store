@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import html2canvas from 'html2canvas';
 import { 
   Store, 
   Plus, 
@@ -25,7 +26,12 @@ import {
   Volume2,
   Eye,
   Printer,
-  Copy
+  Copy,
+  MessageCircle,
+  Send,
+  Check,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { 
   StoreProduct, 
@@ -42,6 +48,96 @@ interface GeneralStoreProps {
   playSound: (frequency: number, duration: number, type?: 'sine' | 'square' | 'sawtooth' | 'triangle') => void;
   onSwitchToTelecom: () => void;
 }
+
+// Thermal printing helper
+const printElement = (elementId: string) => {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'absolute';
+  iframe.style.width = '0px';
+  iframe.style.height = '0px';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+  
+  const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+  if (!iframeDoc) return;
+  
+  iframeDoc.open();
+  iframeDoc.write(`
+    <html>
+      <head>
+        <title>Receipt</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+          body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 10px;
+            color: #000;
+            background: #fff;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          .no-print { display: none !important; }
+          .text-slate-900 { color: #000 !important; }
+          .text-slate-600 { color: #333 !important; }
+          .text-indigo-600 { color: #000 !important; }
+          .bg-slate-50 { background: #f9fafb !important; border: 1px solid #ddd !important; }
+          .bg-indigo-50 { background: #f3f4f6 !important; }
+          .border-dashed { border-style: dashed !important; }
+          .border-slate-300 { border-color: #000 !important; }
+        </style>
+        <script src="https://cdn.tailwindcss.com"><\/script>
+      </head>
+      <body>
+        <div class="p-4" style="max-width: 320px; margin: 0 auto;">
+          ${element.innerHTML}
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+              setTimeout(function() {
+                window.parent.document.body.removeChild(window.frameElement);
+              }, 500);
+            }, 500);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  iframeDoc.close();
+};
+
+// Download element as PNG helper using html2canvas
+const downloadPNG = async (elementId: string, filename: string) => {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  try {
+    const canvas = await html2canvas(element, {
+      scale: 2, // High resolution
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+    });
+    
+    const image = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = image;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error("Failed to generate PNG:", err);
+    alert("PNG ছবি তৈরিতে ত্রুটি হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+  }
+};
 
 export default function GeneralStore({ soundEnabled, playSound, onSwitchToTelecom }: GeneralStoreProps) {
   // --- AUTH / PIN SYSTEM ---
@@ -533,16 +629,32 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
   const [newCustInitialDue, setNewCustInitialDue] = useState<string>('0');
 
   const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<StoreCustomer | null>(null);
+  const [tempReminderPhone, setTempReminderPhone] = useState<string>('');
   const [paymentReceivedAmount, setPaymentReceivedAmount] = useState<string>('');
   const [paymentReceivedCreditedAmount, setPaymentReceivedCreditedAmount] = useState<string>('');
   const [paymentReceivedNote, setPaymentReceivedNote] = useState<string>('');
+
+  // Bulk Notice States
+  const [showBulkReminderModal, setShowBulkReminderModal] = useState<boolean>(false);
+  const [selectedBulkCustomerIds, setSelectedBulkCustomerIds] = useState<string[]>([]);
+  const [currentBulkIndex, setCurrentBulkIndex] = useState<number>(0);
 
   // Autocomplete search states
   const [saleCustomerSearchQuery, setSaleCustomerSearchQuery] = useState<string>('');
   const [showSaleCustomerDropdown, setShowSaleCustomerDropdown] = useState<boolean>(false);
   const [activeMemoSale, setActiveMemoSale] = useState<StoreSale | null>(null);
+  const [onlyLowStockFilter, setOnlyLowStockFilter] = useState<boolean>(false);
   const [showPurchaseSuggestions, setShowPurchaseSuggestions] = useState<boolean>(false);
   const [manualCashInput, setManualCashInput] = useState<string>('');
+
+  // Set temp reminder phone when a customer details sidebar is opened
+  useEffect(() => {
+    if (selectedCustomerDetails) {
+      setTempReminderPhone(selectedCustomerDetails.phone || '');
+    } else {
+      setTempReminderPhone('');
+    }
+  }, [selectedCustomerDetails]);
 
   // Report search & navigation states
   const [reportTab, setReportTab] = useState<'products' | 'transactions'>('products');
@@ -659,6 +771,21 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
       playSound(1000, 0.1, 'sine');
       alert("কাস্টমারের নাম সফলভাবে পরিবর্তন করা হয়েছে!");
     }
+  };
+
+  const handleUpdateCustomerPhone = (id: string, newPhone: string) => {
+    const updated = customers.map(c => {
+      if (c.id === id) {
+        return { ...c, phone: newPhone.trim() };
+      }
+      return c;
+    });
+    saveCustomers(updated);
+    if (selectedCustomerDetails?.id === id) {
+      setSelectedCustomerDetails({ ...selectedCustomerDetails, phone: newPhone.trim() });
+    }
+    playSound(1000, 0.1, 'sine');
+    alert("কাস্টমারের মোবাইল নাম্বার সংরক্ষণ করা হয়েছে!");
   };
 
   const handleDeleteCustomer = (id: string) => {
@@ -1026,23 +1153,6 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         {/* TOP LEVEL METRIC SUMMARY (When viewing Dashboard) */}
         {view === 'dashboard' && (
           <>
-            {/* Low stock alerts */}
-            {lowStockProducts.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-4 rounded-2xl flex items-start gap-3 text-amber-800 dark:text-amber-300 animate-pulse">
-                <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-                <div className="text-xs">
-                  <strong className="block font-bold mb-0.5">স্টক শেষ হওয়ার সতর্কবার্তা ({toBnNum(lowStockProducts.length)}টি পণ্য):</strong>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                    {lowStockProducts.map(p => (
-                      <span key={p.id} className="bg-amber-100 dark:bg-amber-950/40 px-2 py-0.5 rounded font-bold">
-                        {p.name} ({toBnNum(p.stock)} টি অবশিষ্ট)
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Grid Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Today's Profit */}
@@ -1099,10 +1209,23 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                 {/* 1. Products */}
                 <button
                   onClick={() => { setView('products'); playSound(900, 0.05); }}
-                  className="p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow transition-all flex flex-col items-center justify-center gap-2 text-center"
+                  className="p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow transition-all flex flex-col items-center justify-center gap-2 text-center relative overflow-hidden"
                 >
+                  {lowStockProducts.length > 0 && (
+                    <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                  )}
                   <FileSpreadsheet size={24} />
-                  <span className="text-xs font-bold">পণ্য তালিকা / স্টক</span>
+                  <span className="text-xs font-bold flex items-center gap-1">
+                    পণ্য তালিকা / স্টক
+                    {lowStockProducts.length > 0 && (
+                      <span className="bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                        {toBnNum(lowStockProducts.length)}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[10px] opacity-80 font-mono font-medium">Products / Stock</span>
                 </button>
 
@@ -1256,19 +1379,56 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
               </button>
             </div>
 
-            {/* Search */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                <Search size={15} />
-              </span>
-              <input
-                type="text"
-                placeholder="পণ্যের নাম লিখে খুঁজুন..."
-                value={prodSearch}
-                onChange={e => setProdSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-              />
+            {/* Search and Stock Alert Filter */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                  <Search size={15} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="পণ্যের নাম লিখে খুঁজুন..."
+                  value={prodSearch}
+                  onChange={e => setProdSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playSound(900, 0.05);
+                  setOnlyLowStockFilter(!onlyLowStockFilter);
+                }}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${onlyLowStockFilter ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50 font-extrabold shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800'}`}
+              >
+                <AlertTriangle size={14} className={onlyLowStockFilter ? 'text-amber-600 dark:text-amber-400 animate-pulse' : 'text-slate-400'} />
+                <span>স্টক অ্যালার্ট ({toBnNum(lowStockProducts.length)})</span>
+              </button>
             </div>
+
+            {/* In-place low stock summary alert box when the stock alert option/filter is active */}
+            {onlyLowStockFilter && lowStockProducts.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-4 rounded-2xl space-y-2 text-xs text-amber-800 dark:text-amber-300 animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="shrink-0 text-amber-600 dark:text-amber-400" size={16} />
+                  <strong className="font-black">স্টক শেষ হওয়ার সতর্কবার্তা ({toBnNum(lowStockProducts.length)}টি পণ্য):</strong>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {lowStockProducts.map(p => (
+                    <span 
+                      key={p.id} 
+                      className="bg-amber-100 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-2"
+                    >
+                      <span className="text-slate-900 dark:text-slate-100">{p.name}</span>
+                      <span className="bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        {toBnNum(p.stock)} টি অবশিষ্ট
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Table */}
             <div className="overflow-x-auto">
@@ -1285,6 +1445,7 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {products
                     .filter(p => p.name.toLowerCase().includes(prodSearch.toLowerCase()))
+                    .filter(p => !onlyLowStockFilter || p.stock <= 5)
                     .map(p => (
                       <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                         <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">{p.name}</td>
@@ -1588,12 +1749,28 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                   <ChevronLeft size={16} /> ড্যাশবোর্ডে ফিরুন
                 </button>
                 <h3 className="text-base font-black text-slate-950 dark:text-white">বকেয়া খাতা (Credit Ledger)</h3>
-                <button
-                  onClick={() => setShowAddCustomerModal(true)}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow"
-                >
-                  <UserPlus size={14} /> নতুন কাস্টমার
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {customers.some(c => c.due > 0) && (
+                    <button
+                      onClick={() => {
+                        const dueCustomers = customers.filter(c => c.due > 0);
+                        setSelectedBulkCustomerIds(dueCustomers.map(c => c.id));
+                        setCurrentBulkIndex(0);
+                        setShowBulkReminderModal(true);
+                        playSound(1000, 0.08);
+                      }}
+                      className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    >
+                      <MessageCircle size={14} className="animate-bounce" /> সবাইকে নোটিশ পাঠান
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAddCustomerModal(true)}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md cursor-pointer transition-all"
+                  >
+                    <UserPlus size={14} /> নতুন কাস্টমার
+                  </button>
+                </div>
               </div>
 
               {/* Search */}
@@ -1694,6 +1871,95 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                     <span className="text-[11px] text-slate-400 font-sans">মোট বকেয়া ব্যালেন্স</span>
                     <strong className="block text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">৳{toBnNum(selectedCustomerDetails.due)}</strong>
                   </div>
+
+                  {/* Free Due Payment Alerts (ফ্রি নোটিশ সেবা) */}
+                  {selectedCustomerDetails.due > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-4 rounded-2xl space-y-3 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-600 dark:text-amber-400">
+                          <MessageCircle size={16} className="animate-pulse" />
+                        </span>
+                        <strong className="text-xs font-black text-amber-900 dark:text-amber-200">ফ্রি বকেয়া নোটিশ ও এলার্ট</strong>
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
+                        কাস্টমারকে সম্পূর্ণ ফ্রিতে এসএমএস, হোয়াটসঅ্যাপ বা ইমেলের মাধ্যমে বকেয়া পরিশোধের নোটিশ পাঠান।
+                      </p>
+
+                      <div className="space-y-2">
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1">
+                            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400">
+                              <Phone size={11} />
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="মোবাইল বা ইমেল লিখুন..."
+                              value={tempReminderPhone}
+                              onChange={e => setTempReminderPhone(e.target.value)}
+                              className="w-full pl-7 pr-2 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCustomerPhone(selectedCustomerDetails.id, tempReminderPhone)}
+                            className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-bold shrink-0 transition-colors flex items-center gap-1 cursor-pointer"
+                            title="নাম্বার সংরক্ষণ করুন"
+                          >
+                            <Check size={12} /> সংরক্ষণ
+                          </button>
+                        </div>
+
+                        {/* Quick messaging grid links/buttons (2x2 grid for 4 buttons now) */}
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <a
+                            href={`https://api.whatsapp.com/send?phone=${
+                              (tempReminderPhone.replace(/\D/g, '').startsWith('0') ? '88' : '') + tempReminderPhone.replace(/\D/g, '')
+                            }&text=${encodeURIComponent(
+                              `প্রিয় ${selectedCustomerDetails.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(selectedCustomerDetails.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => playSound(1100, 0.1)}
+                            className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                          >
+                            <MessageCircle size={12} /> হোয়াটসঅ্যাপ
+                          </a>
+                          <a
+                            href={`sms:${tempReminderPhone}?body=${encodeURIComponent(
+                              `Prio ${selectedCustomerDetails.name}, Nazmul General Store e apnar baki paona holo ${selectedCustomerDetails.due} taka. Baki taka porishodh korar anurodh roilo. Dhonnobad! Nazmul General Store.`
+                            )}`}
+                            onClick={() => playSound(1100, 0.1)}
+                            className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                          >
+                            <Send size={12} /> এসএমএস
+                          </a>
+                          <a
+                            href={`mailto:${tempReminderPhone.includes('@') ? tempReminderPhone : ''}?subject=${encodeURIComponent(
+                              'বকেয়া বাকির বিবরণী - নাজমুল জেনারেল স্টোর'
+                            )}&body=${encodeURIComponent(
+                              `প্রিয় ${selectedCustomerDetails.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(selectedCustomerDetails.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`
+                            )}`}
+                            onClick={() => playSound(1100, 0.1)}
+                            className="py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                          >
+                            <Mail size={12} /> ইমেল নোটিশ
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const message = `প্রিয় ${selectedCustomerDetails.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(selectedCustomerDetails.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`;
+                              navigator.clipboard.writeText(message);
+                              alert("বকেয়া সতর্কবার্তা মেসেজ কপি সম্পন্ন হয়েছে!");
+                              playSound(1300, 0.1);
+                            }}
+                            className="py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700"
+                          >
+                            <Copy size={11} /> কপি মেসেজ
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Receive / Give Credit Form */}
                   <form onSubmit={handleReceiveDuePayment} className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/40 p-4 rounded-2xl space-y-3">
@@ -2396,6 +2662,268 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
         </div>
       )}
 
+      {/* --- BULK REMINDER / NOTICE MODAL --- */}
+      {showBulkReminderModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white rounded-3xl overflow-hidden max-w-lg w-full border border-slate-100 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle size={20} className="text-amber-500 animate-pulse" />
+                <div>
+                  <h4 className="font-black text-sm tracking-tight text-slate-900 dark:text-white">বকেয়া নোটিশ ও এলার্ট সহকারী (Bulk Notice)</h4>
+                  <p className="text-[10px] text-slate-400 font-medium">নাজমুল জেনারেল স্টোর • সিরাজগঞ্জ</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowBulkReminderModal(false); playSound(650, 0.08); }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl cursor-pointer"
+              >
+                বন্ধ
+              </button>
+            </div>
+
+            {/* Campaign Selection Summary & Bulk Copy Option */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Left Panel: Customer Select & Multi-check */}
+              <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block">১. প্রাপক তালিকা (কাস্টমার সিলেক্ট করুন)</span>
+                
+                <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                  {customers.filter(c => c.due > 0).map(c => {
+                    const isChecked = selectedBulkCustomerIds.includes(c.id);
+                    return (
+                      <label 
+                        key={c.id} 
+                        className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer border transition-all ${
+                          isChecked 
+                            ? 'bg-amber-50/50 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/40 font-extrabold' 
+                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            onChange={() => {
+                              playSound(1000, 0.05);
+                              if (isChecked) {
+                                setSelectedBulkCustomerIds(selectedBulkCustomerIds.filter(id => id !== c.id));
+                              } else {
+                                setSelectedBulkCustomerIds([...selectedBulkCustomerIds, c.id]);
+                              }
+                            }}
+                            className="rounded text-amber-500 focus:ring-amber-500"
+                          />
+                          <span className="truncate max-w-[120px]">{c.name}</span>
+                        </div>
+                        <span className="font-mono text-[11px] text-rose-600 dark:text-rose-400">৳{toBnNum(c.due)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      setSelectedBulkCustomerIds(customers.filter(c => c.due > 0).map(c => c.id));
+                      playSound(800, 0.06);
+                    }}
+                    className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    সব সিলেক্ট
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedBulkCustomerIds([]);
+                      playSound(500, 0.06);
+                    }}
+                    className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    সব বাদ দিন
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Panel: Active Campaign Wizard */}
+              <div className="bg-amber-50/40 dark:bg-amber-950/10 p-3 rounded-2xl border border-amber-100 dark:border-amber-950/30 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase block mb-2">২. নোটিশ কিউ (Notice Queue)</span>
+                  
+                  {selectedBulkCustomerIds.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 font-medium">
+                      কোন কাস্টমার নির্বাচিত হয়নি। বাম পাশের তালিকা থেকে কাস্টমার সিলেক্ট করুন।
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Active queue counter */}
+                      <div className="flex justify-between items-center text-[11px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 px-2.5 py-1.5 rounded-xl">
+                        <span>নির্বাচিত: {toBnNum(selectedBulkCustomerIds.length)} জন</span>
+                        <span className="font-mono">অবস্থান: {toBnNum(currentBulkIndex + 1)} / {toBnNum(selectedBulkCustomerIds.length)}</span>
+                      </div>
+
+                      {customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex]) && (
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-medium">চলতি প্রাপক:</span>
+                            <strong className="text-sm font-black text-slate-900 dark:text-white block">
+                              {customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.name}
+                            </strong>
+                          </div>
+
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500">বকেয়া পরিমাণ:</span>
+                            <strong className="font-mono font-black text-rose-600 dark:text-rose-400">
+                              ৳{toBnNum(customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.due || 0)}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] text-slate-400 block font-semibold mb-1">মোবাইল / ইমেল সংশোধন:</label>
+                            <input 
+                              type="text"
+                              value={customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || ''}
+                              placeholder="মোবাইল বা ইমেল..."
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const activeId = selectedBulkCustomerIds[currentBulkIndex];
+                                const updated = customers.map(c => c.id === activeId ? { ...c, phone: val } : c);
+                                saveCustomers(updated);
+                              }}
+                              className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono font-bold text-slate-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {selectedBulkCustomerIds.length > 0 && (
+                  <div className="flex justify-between gap-2 pt-3 border-t border-amber-200/50 dark:border-amber-900/20 mt-3">
+                    <button
+                      disabled={currentBulkIndex === 0}
+                      onClick={() => {
+                        setCurrentBulkIndex(prev => Math.max(0, prev - 1));
+                        playSound(800, 0.05);
+                      }}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 disabled:opacity-50 cursor-pointer text-slate-700 dark:text-slate-300"
+                    >
+                      পূর্ববর্তী
+                    </button>
+                    <button
+                      disabled={currentBulkIndex >= selectedBulkCustomerIds.length - 1}
+                      onClick={() => {
+                        setCurrentBulkIndex(prev => Math.min(selectedBulkCustomerIds.length - 1, prev + 1));
+                        playSound(900, 0.05);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                    >
+                      পরবর্তী ➔
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Campaign Message Preview & Actions */}
+            {selectedBulkCustomerIds.length > 0 && customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex]) && (
+              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-3">
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase block">৩. নোটিশ মেসেজ প্রিভিউ (Message Preview)</span>
+                
+                <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-900 text-[11px] font-medium leading-relaxed font-sans whitespace-pre-wrap text-slate-700 dark:text-slate-300 select-all border-l-4 border-l-amber-500 text-left">
+                  {`প্রিয় ${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.name}, \nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.due || 0)} টাকা। \nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো। \nধন্যবাদ!\n\nনাজমুল জেনারেল স্টোর \nসাবানা রোড,  বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`}
+                </div>
+
+                {/* Sender action bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <a
+                    href={`https://api.whatsapp.com/send?phone=${
+                      (((customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || '').replace(/\D/g, '').startsWith('0') ? '88' : '') + (customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || '').replace(/\D/g, ''))
+                    }&text=${encodeURIComponent(
+                      `প্রিয় ${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.due || 0)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => playSound(1100, 0.1)}
+                    className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                  >
+                    <MessageCircle size={12} /> হোয়াটসঅ্যাপ
+                  </a>
+                  <a
+                    href={`sms:${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || ''}?body=${encodeURIComponent(
+                      `Prio ${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.name}, Nazmul General Store e apnar baki paona holo ${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.due || 0} taka. Baki taka porishodh korar anurodh roilo. Dhonnobad! Nazmul General Store.`
+                    )}`}
+                    onClick={() => playSound(1100, 0.1)}
+                    className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                  >
+                    <Send size={12} /> এসএমএস
+                  </a>
+                  <a
+                    href={`mailto:${(customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || '').includes('@') ? (customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.phone || '') : ''}?subject=${encodeURIComponent(
+                      'বকেয়া বাকির বিবরণী - নাজমুল জেনারেল স্টোর'
+                    )}&body=${encodeURIComponent(
+                      `প্রিয় ${customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex])?.due || 0)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`
+                    )}`}
+                    onClick={() => playSound(1100, 0.1)}
+                    className="py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm text-center"
+                  >
+                    <Mail size={12} /> ইমেল নোটিশ
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const activeCust = customers.find(c => c.id === selectedBulkCustomerIds[currentBulkIndex]);
+                      if (activeCust) {
+                        const message = `প্রিয় ${activeCust.name},\nনাজমুল জেনারেল স্টোর এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBnNum(activeCust.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর\nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`;
+                        navigator.clipboard.writeText(message);
+                        alert(`${activeCust.name}-এর বকেয়া নোটিশ মেসেজ কপি সম্পন্ন হয়েছে!`);
+                        playSound(1300, 0.1);
+                      }
+                    }}
+                    className="py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700"
+                  >
+                    <Copy size={11} /> কপি মেসেজ
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Combined Group report generator */}
+            {selectedBulkCustomerIds.length > 0 && (
+              <div className="pt-2 flex flex-col sm:flex-row justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => {
+                    const lines = [
+                      `নাজমুল জেনারেল স্টোর - সর্বমোট বকেয়া বিবরণী রিপোর্ট`,
+                      `তারিখ: ${toBnNum(new Date().toLocaleDateString('bn-BD'))}`,
+                      `---------------------------------------`
+                    ];
+                    const selectedCusts = customers.filter(c => selectedBulkCustomerIds.includes(c.id));
+                    selectedCusts.forEach((c, index) => {
+                      lines.push(`${toBnNum(index + 1)}. ${c.name}: ৳${toBnNum(c.due)} টাকা ${c.phone ? `(${c.phone})` : ''}`);
+                    });
+                    lines.push(`---------------------------------------`);
+                    lines.push(`সর্বমোট নির্বাচিত বকেয়া: ৳${toBnNum(selectedCusts.reduce((sum, current) => sum + current.due, 0))} টাকা`);
+                    lines.push(`\nসবাইকে দ্রুত বকেয়া টাকা পরিশোধের অনুরোধ রইল।\nধন্যবাদ,\nনাজমুল জেনারেল স্টোর।`);
+
+                    navigator.clipboard.writeText(lines.join('\n'));
+                    alert("সকল নির্বাচিত গ্রাহকের বকেয়া রিপোর্ট একসাথে কপি করা হয়েছে!");
+                    playSound(1300, 0.15);
+                  }}
+                  className="py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer transition-all border border-slate-200 dark:border-slate-700 w-full text-center"
+                >
+                  <Copy size={14} /> সব গ্রাহকের বকেয়া রিপোর্ট একসাথে কপি করুন
+                </button>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
       {/* --- CHANGE PIN MODAL --- */}
       {showPinChangeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -2451,6 +2979,140 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- GROCERY SALE MEMO SLIP MODAL (NAZMUL GENERAL STORE) --- */}
+      {activeMemoSale && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white text-slate-900 rounded-3xl overflow-hidden max-w-[340px] w-full border border-slate-100 shadow-2xl p-5 space-y-4">
+            
+            {/* Receipt Content Wrapper for Capture/Print */}
+            <div id="grocery-receipt-card" className="bg-white p-2">
+              <div className="text-center font-sans space-y-1">
+                <div className="text-rose-600 bg-rose-50 w-11 h-11 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <Store size={20} />
+                </div>
+                <h4 className="font-black text-base text-slate-900 tracking-tight">নাজমুল জেনারেল স্টোর</h4>
+                <p className="text-[10px] text-rose-600 font-extrabold bg-rose-50 px-2 py-0.5 rounded-full inline-block">মুদি খানা মেমো স্লিপ</p>
+                <p className="text-[9px] text-slate-400 font-medium block mt-1">ভাউচার রসিদ আইডি: {activeMemoSale.id}</p>
+              </div>
+
+              {/* Details List */}
+              <div className="bg-slate-50 rounded-2xl p-3 text-[11px] text-slate-600 space-y-2 border border-slate-200/55 mt-3">
+                <div className="flex justify-between">
+                  <span>ক্রেতার নাম:</span>
+                  <strong className="text-slate-950 font-bold">{activeMemoSale.customerName === 'Unknown' ? 'সাধারণ কাস্টমার' : activeMemoSale.customerName}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>তারিখ ও সময়:</span>
+                  <span className="font-medium text-slate-700">{toBnNum(activeMemoSale.date)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>লেনদেনের ধরণ:</span>
+                  <span className={`px-2 py-0.5 rounded font-black text-[10px] ${activeMemoSale.paymentMethod === 'Cash' ? 'bg-emerald-100 text-emerald-800' : activeMemoSale.paymentMethod === 'Due' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
+                    {activeMemoSale.paymentMethod === 'Cash' ? 'নগদ বিক্রয়' : activeMemoSale.paymentMethod === 'Due' ? 'বাকি বিক্রয়' : 'মোবাইল ব্যাংকিং'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Items List Table */}
+              <div className="mt-4 border-t border-slate-200 pt-3">
+                <span className="text-[10px] uppercase font-black text-slate-400 block mb-1">ক্রয়কৃত পণ্যের বিবরণী</span>
+                <div className="divide-y divide-slate-100 text-[11px]">
+                  {activeMemoSale.items.map((item, index) => (
+                    <div key={index} className="py-2 flex justify-between items-start">
+                      <div>
+                        <strong className="text-slate-900 block font-bold">{item.name}</strong>
+                        <span className="text-slate-400 text-[10px] font-medium">
+                          {toBnNum(item.quantity)} পিস × ৳{toBnNum(item.sellPrice.toFixed(2))}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-900">
+                        ৳{toBnNum((item.quantity * item.sellPrice).toFixed(2))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Core Financial Block */}
+              <div className="border-y-2 border-dashed border-slate-300 py-3 text-center px-2 space-y-1 mt-3">
+                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block">মোট পরিশোধযোগ্য টাকা</span>
+                <strong className="text-2xl font-black text-rose-950 font-mono tracking-tight block">
+                  ৳{toBnNum(activeMemoSale.grandTotal.toFixed(2))}
+                </strong>
+                <span className="text-[9px] text-rose-500 font-bold block bg-rose-50 py-0.5 rounded-full px-2 max-w-max mx-auto select-none">
+                  ধন্যবাদ, আবার আসবেন!
+                </span>
+              </div>
+
+              {/* Barcode Mock */}
+              <div className="flex flex-col items-center justify-center select-none pt-3">
+                <div className="h-7 w-44 bg-slate-800 flex items-center justify-center rounded overflow-hidden opacity-90 mb-1 relative bg-white border border-slate-200">
+                  <div className="absolute inset-x-2 inset-y-1 flex justify-between">
+                    <div className="bg-black w-1.5 h-full" />
+                    <div className="bg-black w-0.5 h-full" />
+                    <div className="bg-black w-1.5 h-full" />
+                    <div className="bg-black w-1 h-full" />
+                    <div className="bg-black w-2 h-full" />
+                    <div className="bg-black w-0.5 h-full" />
+                    <div className="bg-black w-1.5 h-full" />
+                    <div className="bg-black w-0.5 h-full" />
+                    <div className="bg-black w-1.5 h-full" />
+                    <div className="bg-black w-2 h-full" />
+                    <div className="bg-black w-1 h-full" />
+                    <div className="bg-black w-0.5 h-full" />
+                  </div>
+                </div>
+                <span className="text-[8px] text-slate-400 font-mono tracking-wider">REF-{activeMemoSale.id}</span>
+              </div>
+            </div>
+
+            {/* Utility buttons grid */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  const itemsList = activeMemoSale.items.map(it => `${it.name} (${toBnNum(it.quantity)} পিস)`).join(', ');
+                  const textContent = `নাজমুল জেনারেল স্টোর\nমেমো আইডি: ${activeMemoSale.id}\nক্রেতা: ${activeMemoSale.customerName === 'Unknown' ? 'সাধারণ কাস্টমার' : activeMemoSale.customerName}\nপণ্য: ${itemsList}\nমোট: ৳${toBnNum(activeMemoSale.grandTotal.toFixed(2))}\nধন্যবাদ, আবার আসবেন!`;
+                  navigator.clipboard.writeText(textContent);
+                  alert('মুদিখানা মেমো কপি সম্পন্ন হয়েছে!');
+                  playSound(1300, 0.1);
+                }}
+                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Copy size={12} />
+                কপি মেমো
+              </button>
+              <button
+                onClick={() => {
+                  playSound(950, 0.1);
+                  downloadPNG('grocery-receipt-card', `grocery_memo_${activeMemoSale.id}.png`);
+                }}
+                className="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Download size={12} />
+                ডাউনলোড PNG
+              </button>
+              <button
+                onClick={() => {
+                  playSound(1100, 0.1);
+                  printElement('grocery-receipt-card');
+                }}
+                className="py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Printer size={12} />
+                থার্মাল প্রিন্ট
+              </button>
+              <button
+                onClick={() => { setActiveMemoSale(null); playSound(650, 0.08); }}
+                className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-xl cursor-pointer shadow transition-all flex items-center justify-center"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+
           </div>
         </div>
       )}
