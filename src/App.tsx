@@ -786,14 +786,14 @@ export default function App() {
     const updatedBalances = { ...balances };
 
     if (activeAction === 'cash_out') {
-      // Wallet increases by Amount (digital wallet gets +amount)
+      // Wallet increases by Amount + Commission (digital wallet gets +amount + commission)
       // Cash decreases by Amount given to customer (cash hand gets -amount)
-      updatedBalances[activeAccount] += amt;
+      updatedBalances[activeAccount] += amt + calculatedCommission;
       updatedBalances.cash -= amt;
     } else if (activeAction === 'cash_in') {
-      // Wallet decreases by Amount
+      // Wallet decreases by Amount and increases by Commission
+      updatedBalances[activeAccount] -= (amt - calculatedCommission);
       // Cash increases by Amount received from customer
-      updatedBalances[activeAccount] -= amt;
       updatedBalances.cash += received;
     } else if (activeAction === 'pay_bill') {
       // Wallet decreases by Amount
@@ -1437,10 +1437,14 @@ export default function App() {
       const updatedCardStock = { ...cardStock };
 
       if (txn.actionType === 'cash_out') {
-        // Cash Out did: wallet += amt, cash -= amt
-        updatedBalances[txn.accountKey] -= txn.amount;
+        // Cash Out did: wallet += amt + commission, cash -= amt
+        updatedBalances[txn.accountKey] -= (txn.amount + (txn.commission || 0));
         updatedBalances.cash += txn.amount;
-      } else if (txn.actionType === 'cash_in' || txn.actionType === 'pay_bill' || txn.actionType === 'load') {
+      } else if (txn.actionType === 'cash_in') {
+        // Cash In did: wallet -= (amt - commission), cash += received
+        updatedBalances[txn.accountKey] += (txn.amount - (txn.commission || 0));
+        updatedBalances.cash -= txn.amountReceived;
+      } else if (txn.actionType === 'pay_bill' || txn.actionType === 'load') {
         // Did: wallet -= amt, cash += received
         updatedBalances[txn.accountKey] += txn.amount;
         updatedBalances.cash -= txn.amountReceived;
