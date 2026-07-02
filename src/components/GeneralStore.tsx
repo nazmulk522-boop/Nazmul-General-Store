@@ -646,6 +646,7 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
   const [onlyLowStockFilter, setOnlyLowStockFilter] = useState<boolean>(false);
   const [showPurchaseSuggestions, setShowPurchaseSuggestions] = useState<boolean>(false);
   const [manualCashInput, setManualCashInput] = useState<string>('');
+  const [showEditDrawerCash, setShowEditDrawerCash] = useState<boolean>(false);
 
   // Set temp reminder phone when a customer details sidebar is opened
   useEffect(() => {
@@ -912,6 +913,7 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
       });
     }
     saveDailyLedgers(updatedLedgers);
+    setShowEditDrawerCash(false);
     playSound(1000, 0.1, 'sine');
     alert("ড্রয়ার ক্যাশ সফলভাবে আপডেট করা হয়েছে!");
   };
@@ -2174,8 +2176,24 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                   ৳{toBnNum(customers.reduce((acc, c) => acc + c.transactions.filter(t => t.type === 'payment_received' && t.date === ledgerDateFilter).reduce((sum, t) => sum + t.amount, 0), 0))}
                 </strong>
               </div>
-              <div className="p-4 bg-violet-50 dark:bg-violet-950/10 border border-violet-100 dark:border-violet-950/40 rounded-2xl">
-                <span className="text-[10px] text-slate-500 font-sans block mb-1 font-bold">নেট ডে ক্যাশ (Net Cash)</span>
+              <div className="p-4 bg-violet-50 dark:bg-violet-950/10 border border-violet-100 dark:border-violet-950/40 rounded-2xl relative">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="text-[10px] text-slate-500 font-sans block font-bold">নেট ডে ক্যাশ (Net Cash)</span>
+                  {activeLedger.closeCash === null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualCashInput(activeLedger.manualCash ? activeLedger.manualCash.toString() : '');
+                        setShowEditDrawerCash(!showEditDrawerCash);
+                        playSound(1000, 0.08);
+                      }}
+                      className="p-1 -mr-1 text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/50 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                      title="ড্রয়ার ক্যাশ এডিট করুন"
+                    >
+                      <Edit size={12} />
+                    </button>
+                  )}
+                </div>
                 <strong className="text-base font-black text-violet-900 dark:text-violet-300">
                   ৳{toBnNum((
                     sales.filter(s => s.date === ledgerDateFilter && s.paymentMethod !== 'Due').reduce((acc, curr) => acc + curr.grandTotal, 0) +
@@ -2190,9 +2208,9 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
               </div>
             </div>
 
-            {/* Manual Drawer Cash Addition Form */}
-            {activeLedger.closeCash === null && (
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
+            {/* Manual Drawer Cash Addition Form (Toggled via Edit) */}
+            {activeLedger.closeCash === null && showEditDrawerCash && (
+              <div className="bg-violet-50/50 dark:bg-violet-950/5 p-4 rounded-2xl border border-violet-100 dark:border-violet-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 animate-fadeIn">
                 <div className="text-xs space-y-1 w-full sm:w-auto">
                   <strong className="block text-slate-700 dark:text-slate-300">ড্রয়ার ক্যাশ ম্যানুয়াল এড (Drawer Cash/Net Cash):</strong>
                   <p className="text-[10px] text-slate-400">ড্রয়ার ক্যাশের এই টাকা আজকের নেট ডে ক্যাশ (Net Cash) হিসাবের সাথে যোগ হবে।</p>
@@ -2203,14 +2221,24 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                     placeholder="টাকার পরিমাণ (যেমন: ৫০০)"
                     value={manualCashInput}
                     onChange={e => setManualCashInput(e.target.value)}
-                    className="p-2.5 rounded-xl bg-white dark:bg-[#1e293b] text-xs border border-slate-200 dark:border-slate-800 text-center font-bold w-full sm:w-36 font-mono"
+                    className="p-2.5 rounded-xl bg-white dark:bg-[#1e293b] text-xs border border-slate-200 dark:border-slate-800 text-center font-bold w-full sm:w-36 font-mono text-slate-900 dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={handleSaveManualCash}
-                    className="px-4 py-2 bg-indigo-650 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow transition-all"
                   >
                     সংরক্ষণ করুন
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditDrawerCash(false);
+                      playSound(500, 0.08);
+                    }}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-all"
+                  >
+                    বাতিল
                   </button>
                 </div>
               </div>
