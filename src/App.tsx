@@ -373,24 +373,17 @@ export default function App() {
     return [];
   });
 
-  // State: Telecom Customers (Baki/Credit Ledger connected to General Store)
+  // State: Telecom Customers (Baki/Credit Ledger)
   const [telecomCustomers, setTelecomCustomers] = useState<TelecomCustomer[]>(() => {
-    const saved = localStorage.getItem('nazmul_store_customers');
+    const saved = localStorage.getItem('nazmul_telecom_customers');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
-    // Seeds for telecom/store customers to give a nice starting experience
+    // Seeds for telecom customers to give a nice starting experience
     return [
-      { id: 'c1', name: 'সেতু ভাই', phone: '', due: 1229, transactions: [{ id: 't1', type: 'sale_due', amount: 1229, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c2', name: 'তাইবা, তাবাসসুম', phone: '', due: 311, transactions: [{ id: 't2', type: 'sale_due', amount: 311, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c3', name: 'মাসুদ (গোস্ত)', phone: '', due: 50, transactions: [{ id: 't3', type: 'sale_due', amount: 50, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c4', name: 'সফুর (গোস্ত)', phone: '', due: 360, transactions: [{ id: 't4', type: 'sale_due', amount: 360, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c5', name: 'আলিম (গোস্ত)', phone: '', due: 560, transactions: [{ id: 't5', type: 'sale_due', amount: 560, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c6', name: 'দুলাল (ফার্নিচার)', phone: '', due: 85, transactions: [{ id: 't6', type: 'sale_due', amount: 85, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c7', name: 'সাগর (ফার্নিচার)', phone: '', due: 250, transactions: [{ id: 't7', type: 'sale_due', amount: 250, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c8', name: 'সায়েমের দুলাভাই', phone: '', due: 190, transactions: [{ id: 't8', type: 'sale_due', amount: 190, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c9', name: 'কায়দা আজম', phone: '', due: 12, transactions: [{ id: 't9', type: 'sale_due', amount: 12, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c10', name: 'আরিফ (বাস)', phone: '', due: 120, transactions: [{ id: 't10', type: 'sale_due', amount: 120, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] }
+      { id: 'tc1', name: 'রহিম মিঞা (ফ্লেক্সিলোড)', phone: '01711223344', due: 120, transactions: [{ id: 'tt1', type: 'sale_due', amount: 120, date: '2026-07-01', note: 'পূর্বের মোবাইল রিচার্জ বাকি', timestamp: Date.now() }] },
+      { id: 'tc2', name: 'করিম হোসেন (কার্ড)', phone: '01815556677', due: 30, transactions: [{ id: 'tt2', type: 'sale_due', amount: 30, date: '2026-07-01', note: 'মিনিট কার্ড ক্রয় বাকি', timestamp: Date.now() }] },
+      { id: 'tc3', name: 'সজীব আহমেদ (বিকাশ)', phone: '01912345678', due: 200, transactions: [{ id: 'tt3', type: 'sale_due', amount: 200, date: '2026-07-01', note: 'ক্যাশ আউট বাকি', timestamp: Date.now() }] }
     ];
   });
 
@@ -544,7 +537,7 @@ export default function App() {
 
   const saveTelecomCustomers = (newC: TelecomCustomer[]) => {
     setTelecomCustomers(newC);
-    localStorage.setItem('nazmul_store_customers', JSON.stringify(newC));
+    localStorage.setItem('nazmul_telecom_customers', JSON.stringify(newC));
   };
 
   // Card stock total valuation helper based on actual buy prices of remaining stock
@@ -1207,6 +1200,7 @@ export default function App() {
         purchases,
         cardStock,
         cardUnits,
+        telecomCustomers,
         commissionOffset,
         volumeOffset,
         timestamp: Date.now()
@@ -1252,6 +1246,7 @@ export default function App() {
       }
       if (backupData.transactions) saveTransactions(backupData.transactions);
       if (backupData.purchases) savePurchases(backupData.purchases);
+      if (backupData.telecomCustomers) saveTelecomCustomers(backupData.telecomCustomers);
       
       if (typeof backupData.commissionOffset === 'number') {
         saveCommissionOffset(backupData.commissionOffset);
@@ -1390,6 +1385,7 @@ export default function App() {
           }
           saveTransactions(data.transactions);
           if (data.purchases) savePurchases(data.purchases);
+          if (data.telecomCustomers) saveTelecomCustomers(data.telecomCustomers);
           alert('অভিনন্দন! আপনার ব্যাকআপ ডাটা সফলভাবে টেলিকমে পুনরুদ্ধার করা হয়েছে।');
           playSound(1500, 0.3);
         } else {
@@ -1410,6 +1406,7 @@ export default function App() {
       purchases,
       cardStock,
       cardUnits,
+      telecomCustomers,
       timestamp: Date.now()
     }, null, 2));
     const dlAnchorElem = document.createElement('a');
