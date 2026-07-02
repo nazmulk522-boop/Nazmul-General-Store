@@ -1025,6 +1025,57 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
     fileReader.readAsText(file);
   };
 
+  const handleExportProductsOnlyBackup = () => {
+    try {
+      const dataStr = JSON.stringify({
+        products,
+        version: "stock_only_1.0",
+        exportedAt: new Date().toISOString()
+      }, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      
+      const exportFileDefaultName = `Nazmul_Store_Stock_Only_Backup_${new Date().toISOString().slice(0,10)}.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+      playSound(1200, 0.25, 'sine');
+    } catch (e) {
+      alert("শুধু স্টক ব্যাকআপ তৈরি করতে সমস্যা হয়েছে!");
+    }
+  };
+
+  const handleImportProductsOnlyBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    fileReader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target?.result as string);
+        let importedProducts: StoreProduct[] = [];
+        if (Array.isArray(parsed)) {
+          importedProducts = parsed;
+        } else if (parsed && Array.isArray(parsed.products)) {
+          importedProducts = parsed.products;
+        } else {
+          alert("ভুল ব্যাকআপ ফরম্যাট! সঠিক স্টক ফাইল সিলেক্ট করুন।");
+          return;
+        }
+
+        if (confirm("সতর্কতা! আপনি কি শুধু স্টক ব্যাকআপ ফাইলটি রিস্টোর করতে চান? আপনার বর্তমান সমস্ত পণ্যের নাম, দাম ও স্টক প্রতিস্থাপিত হবে (বিক্রয় ও কাস্টমার হিসাব অপরিবর্তিত থাকবে)।")) {
+          saveProducts(importedProducts);
+          playSound(1250, 0.4, 'sine');
+          alert("সফলভাবে শুধু স্টক ব্যাকআপ ফাইল রিস্টোর সম্পন্ন হয়েছে!");
+        }
+      } catch (err) {
+        alert("স্টক ফাইল পড়তে সমস্যা হয়েছে!");
+      }
+    };
+    fileReader.readAsText(file);
+  };
+
   const handleClearTodaySales = () => {
     if (confirm("সতর্কতা! আপনি কি আজকের মুদি বিক্রয়ের সমস্ত রেকর্ড ডিলিট করতে চান? এর ফলে স্টকের পরিমাণ পুনরায় পরিবর্তিত হবে না।")) {
       const nonTodaySales = sales.filter(s => s.date !== todayStr);
@@ -1295,20 +1346,42 @@ export default function GeneralStore({ soundEnabled, playSound, onSwitchToTeleco
                   className="p-4 bg-fuchsia-50 dark:bg-fuchsia-950/15 hover:bg-fuchsia-100 border border-fuchsia-200 dark:border-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-400 rounded-2xl shadow-sm transition-all flex flex-col items-center justify-center gap-2 text-center"
                 >
                   <Download size={24} />
-                  <span className="text-xs font-bold">ব্যাকআপ ডাউনলোড</span>
+                  <span className="text-xs font-bold">পূর্ণাঙ্গ ব্যাকআপ</span>
                   <span className="text-[10px] text-slate-400 font-mono">Full Export</span>
+                </button>
+
+                {/* 9. Stock Only Backup Download */}
+                <button
+                  onClick={handleExportProductsOnlyBackup}
+                  className="p-4 bg-emerald-50 dark:bg-emerald-950/15 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 rounded-2xl shadow-sm transition-all flex flex-col items-center justify-center gap-2 text-center"
+                >
+                  <Download size={24} className="text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-bold">শুধু স্টক ব্যাকআপ</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Stock Only Export</span>
                 </button>
               </div>
 
               <div className="mt-4 flex flex-col sm:flex-row gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                {/* Restore Import File Input */}
+                {/* Restore Import File Input (Full) */}
                 <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/15 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl text-xs font-bold text-rose-700 dark:text-rose-400 cursor-pointer transition-all">
                   <Upload size={16} />
-                  <span>ব্যাকআপ ফাইল ইমপোর্ট (.JSON)</span>
+                  <span>পূর্ণাঙ্গ ব্যাকআপ ইমপোর্ট (.JSON)</span>
                   <input
                     type="file"
                     accept=".json"
                     onChange={handleImportFullBackup}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Restore Import File Input (Stock Only) */}
+                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/15 dark:hover:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-2xl text-xs font-bold text-emerald-700 dark:text-emerald-400 cursor-pointer transition-all">
+                  <Upload size={16} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>শুধু স্টক ইমপোর্ট (.JSON)</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportProductsOnlyBackup}
                     className="hidden"
                   />
                 </label>
