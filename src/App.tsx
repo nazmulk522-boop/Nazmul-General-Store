@@ -373,54 +373,24 @@ export default function App() {
     return [];
   });
 
-  // State: Telecom Customers (Baki/Credit Ledger)
+  // State: Telecom Customers (Baki/Credit Ledger connected to General Store)
   const [telecomCustomers, setTelecomCustomers] = useState<TelecomCustomer[]>(() => {
-    const saved = localStorage.getItem('nazmul_telecom_customers');
+    const saved = localStorage.getItem('nazmul_store_customers');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
-    // Seeds for telecom customers to give a nice starting experience
+    // Seeds for telecom/store customers to give a nice starting experience
     return [
-      {
-        id: 'T-CUST-1',
-        name: 'সেতু ভাই',
-        phone: '01715888222',
-        due: 120,
-        transactions: [
-          {
-            id: 'T-TX-1',
-            type: 'due',
-            amount: 120,
-            date: '2026-07-01',
-            note: 'ফ্লেক্সিলোড বাকি',
-            timestamp: Date.now() - 1000 * 60 * 60 * 24
-          }
-        ]
-      },
-      {
-        id: 'T-CUST-2',
-        name: 'মিজান কাকা',
-        phone: '01305445229',
-        due: 0,
-        transactions: [
-          {
-            id: 'T-TX-2',
-            type: 'due',
-            amount: 50,
-            date: '2026-07-01',
-            note: 'মিনিট কার্ড',
-            timestamp: Date.now() - 1000 * 60 * 60 * 12
-          },
-          {
-            id: 'T-TX-3',
-            type: 'payment',
-            amount: 50,
-            date: '2026-07-01',
-            note: 'জমা পরিশোধ',
-            timestamp: Date.now() - 1000 * 60 * 60 * 10
-          }
-        ]
-      }
+      { id: 'c1', name: 'সেতু ভাই', phone: '', due: 1229, transactions: [{ id: 't1', type: 'sale_due', amount: 1229, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
+      { id: 'c2', name: 'তাইবা, তাবাসসুম', phone: '', due: 311, transactions: [{ id: 't2', type: 'sale_due', amount: 311, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
+      { id: 'c3', name: 'মাসুদ (গোস্ত)', phone: '', due: 50, transactions: [{ id: 't3', type: 'sale_due', amount: 50, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c4', name: 'সফুর (গোস্ত)', phone: '', due: 360, transactions: [{ id: 't4', type: 'sale_due', amount: 360, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c5', name: 'আলিম (গোস্ত)', phone: '', due: 560, transactions: [{ id: 't5', type: 'sale_due', amount: 560, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c6', name: 'দুলাল (ফার্নিচার)', phone: '', due: 85, transactions: [{ id: 't6', type: 'sale_due', amount: 85, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c7', name: 'সাগর (ফার্নিচার)', phone: '', due: 250, transactions: [{ id: 't7', type: 'sale_due', amount: 250, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c8', name: 'সায়েমের দুলাভাই', phone: '', due: 190, transactions: [{ id: 't8', type: 'sale_due', amount: 190, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c9', name: 'কায়দা আজম', phone: '', due: 12, transactions: [{ id: 't9', type: 'sale_due', amount: 12, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
+      { id: 'c10', name: 'আরিফ (বাস)', phone: '', due: 120, transactions: [{ id: 't10', type: 'sale_due', amount: 120, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] }
     ];
   });
 
@@ -572,7 +542,7 @@ export default function App() {
 
   const saveTelecomCustomers = (newC: TelecomCustomer[]) => {
     setTelecomCustomers(newC);
-    localStorage.setItem('nazmul_telecom_customers', JSON.stringify(newC));
+    localStorage.setItem('nazmul_store_customers', JSON.stringify(newC));
   };
 
   // Card stock total valuation helper based on actual buy prices of remaining stock
@@ -667,22 +637,29 @@ export default function App() {
   }, [phone]);
 
   // Dynamic automatic calculation of card prices
+  // Dynamic automatic calculation of card prices
   useEffect(() => {
     if (activeAction === 'minute_card') {
       const basePrice = selectedCardPrice;
       const oldestBuyPrice = getOldestCardBuyPrice(activeAccount as 'gp' | 'robi' | 'airtel' | 'banglalink', basePrice);
       const customerReceipt = basePrice + 1.0;
       setAmountInput(String(oldestBuyPrice));
-      setAmountReceivedInput(String(customerReceipt));
+      if (!isTelecomDue) {
+        setAmountReceivedInput(String(customerReceipt));
+      }
     } else if (activeAction === 'load' || activeAction === 'cash_in' || activeAction === 'pay_bill') {
       // For loads, standard amounts from account matches amount received usually
-      setAmountReceivedInput(amountInput);
+      if (!isTelecomDue) {
+        setAmountReceivedInput(amountInput);
+      }
     } else if (activeAction === 'cash_out') {
       // For cash out, what we received into the digital wallet of agent is the Cash Out amount.
       // What we given to the customer in cash is the same amount.
-      setAmountReceivedInput(amountInput);
+      if (!isTelecomDue) {
+        setAmountReceivedInput(amountInput);
+      }
     }
-  }, [activeAction, selectedCardPrice, amountInput, activeAccount, cardUnits]);
+  }, [activeAction, selectedCardPrice, amountInput, activeAccount, cardUnits, isTelecomDue]);
 
   // Calculations for summarized metrics
   // total online balance = Sum of bKash, Nagad, Rocket, GP, Robi, Airtel, BL and card stock valuations
@@ -745,8 +722,8 @@ export default function App() {
 
     const clientPhone = phone.trim() || 'N/A';
 
-    const amt = parseFloat(amountInput);
-    const received = parseFloat(amountReceivedInput);
+    const amt = parseFloat(amountInput) || 0;
+    const received = isNaN(parseFloat(amountReceivedInput)) ? 0 : parseFloat(amountReceivedInput);
 
     if (isNaN(amt) || amt <= 0) {
       setErrorMsg('দয়া করে সঠিক টাকার পরিমাণ লিখুন।');
@@ -860,13 +837,13 @@ export default function App() {
     saveTransactions([newTransaction, ...transactions]);
 
     // Handle telecom credit/due (baki) system
-    const expectedVal = activeAction === 'minute_card' ? selectedCardPrice : amt;
-    const dueAmount = expectedVal - received;
+    const expectedVal = activeAction === 'minute_card' ? (selectedCardPrice + 1) : amt;
+    const dueAmount = Math.max(0, expectedVal - received);
     if (isTelecomDue && dueAmount > 0) {
       let updatedCustomers = [...telecomCustomers];
       const newTxn: TelecomCustomerTxn = {
         id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        type: 'due',
+        type: 'sale_due',
         amount: dueAmount,
         date: new Date().toISOString().split('T')[0],
         note: `বাকিতে ${activeAction === 'load' ? 'ফ্লেক্সিলোড' : activeAction === 'minute_card' ? 'মিনিট কার্ড' : activeAction === 'cash_in' ? 'ক্যাশ ইন' : activeAction === 'pay_bill' ? 'পে বিল' : activeAction} (${activeAccount.toUpperCase()})` + (note.trim() ? `: ${note.trim()}` : ''),
@@ -877,7 +854,7 @@ export default function App() {
       if (selectedTelecomCustomerId === 'new') {
         const newCustName = newTelecomCustomerName.trim() || 'নতুন গ্রাহক';
         const newCust: TelecomCustomer = {
-          id: `T-CUST-${Date.now()}`,
+          id: `c-${Date.now()}`,
           name: newCustName,
           phone: clientPhone === 'N/A' ? '' : clientPhone,
           due: dueAmount,
@@ -966,7 +943,7 @@ export default function App() {
 
         const newTxn: TelecomCustomerTxn = {
           id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          type: bakiActionType,
+          type: bakiActionType === 'due' ? 'sale_due' : 'payment_received',
           amount: amt,
           date: new Date().toISOString().split('T')[0],
           note: bakiFormNote.trim() || (bakiActionType === 'payment' ? 'জমা পরিশোধ' : 'নতুন বাকি'),
@@ -2104,7 +2081,7 @@ export default function App() {
                   <input
                     type="number"
                     step="any"
-                    disabled={activeAction === 'minute_card'}
+                    disabled={activeAction === 'minute_card' && !isTelecomDue}
                     placeholder="৳ পেয়েছি"
                     value={amountReceivedInput}
                     onChange={(e) => setAmountReceivedInput(e.target.value)}
@@ -2147,8 +2124,18 @@ export default function App() {
                   type="checkbox"
                   checked={isTelecomDue}
                   onChange={(e) => {
-                    setIsTelecomDue(e.target.checked);
+                    const checked = e.target.checked;
+                    setIsTelecomDue(checked);
                     playSound(1000, 0.05);
+                    if (checked) {
+                      setAmountReceivedInput('0');
+                    } else {
+                      if (activeAction === 'minute_card') {
+                        setAmountReceivedInput(String(selectedCardPrice + 1));
+                      } else {
+                        setAmountReceivedInput(amountInput);
+                      }
+                    }
                   }}
                   className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                 />
@@ -3104,6 +3091,51 @@ export default function App() {
                           </form>
                         </div>
 
+                        {/* Notice & Communication Block */}
+                        {customer.due > 0 && (
+                          <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-2xl text-left space-y-2.5">
+                            <span className="text-[10px] font-black text-amber-800 uppercase block">🔔 বকেয়া তাগাদা নোটিশ (Due Payment Alert):</span>
+                            
+                            <div className="bg-white p-2.5 rounded-xl border border-amber-100 text-[11px] font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
+                              {`প্রিয় ${customer.name}, \nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা। \nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো। \nধন্যবাদ!\n\nনাজমুল টেলিকম ও জেনারেল স্টোর`}
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <a
+                                href={`https://api.whatsapp.com/send?phone=${
+                                  (((customer.phone || '').replace(/\D/g, '').startsWith('0') ? '88' : '') + (customer.phone || '').replace(/\D/g, ''))
+                                }&text=${encodeURIComponent(
+                                  `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম ও জেনারেল স্টোর`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors text-center"
+                              >
+                                WhatsApp পাঠান
+                              </a>
+                              <a
+                                href={`sms:${customer.phone || ''}?body=${encodeURIComponent(
+                                  `Prio ${customer.name}, Nazmul Telecom o General Store e apnar baki holo ${customer.due} taka. Baki porishodh korar anurodh roilo. Dhonnobad! Nazmul Telecom.`
+                                )}`}
+                                className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors text-center"
+                              >
+                                SMS পাঠান
+                              </a>
+                              <button
+                                onClick={() => {
+                                  const message = `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম ও জেনারেল স্টোর`;
+                                  navigator.clipboard.writeText(message);
+                                  alert(`নোটিশ মেসেজ কপি হয়েছে!`);
+                                  playSound(1300, 0.1);
+                                }}
+                                className="py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors text-center"
+                              >
+                                মেসেজ কপি করুন
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Customer Transaction Statements List */}
                         <div className="space-y-2 text-left">
                           <span className="text-xs font-black text-slate-500 uppercase tracking-wider block">গ্রাহকের পূর্ববর্তী হিসাব বিবরণী:</span>
@@ -3115,7 +3147,7 @@ export default function App() {
                               </div>
                             ) : (
                               customer.transactions.map(txn => {
-                                const isDue = txn.type === 'due';
+                                const isDue = txn.type === 'due' || txn.type === 'sale_due';
                                 return (
                                   <div
                                     key={txn.id}

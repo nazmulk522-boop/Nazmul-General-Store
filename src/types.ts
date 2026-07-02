@@ -116,11 +116,12 @@ export interface StoreSale {
 
 export interface StoreCustomerTxn {
   id: string;
-  type: 'sale_due' | 'payment_received';
+  type: 'sale_due' | 'payment_received' | 'due' | 'payment';
   amount: number;
   date: string;
   note?: string;
   timestamp: number;
+  transactionId?: string;
 }
 
 export interface StoreCustomer {
@@ -147,21 +148,6 @@ export interface StoreDailyLedger {
   manualCash?: number;
 }
 
-export interface TelecomCustomerTxn {
-  id: string;
-  type: 'due' | 'payment';
-  amount: number;
-  date: string;
-  note?: string;
-  timestamp: number;
-  transactionId?: string;
-}
-
-export interface TelecomCustomer {
-  id: string;
-  name: string;
-  phone: string;
-  due: number;
-  transactions: TelecomCustomerTxn[];
-}
+export type TelecomCustomerTxn = StoreCustomerTxn;
+export type TelecomCustomer = StoreCustomer;
 
