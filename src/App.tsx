@@ -45,7 +45,9 @@ import {
   MessageCircle,
   Users,
   Mail,
-  Send
+  Send,
+  UserPlus,
+  CheckCircle
 } from 'lucide-react';
 import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit, TelecomCustomer, TelecomCustomerTxn } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
@@ -1145,6 +1147,65 @@ export default function App() {
     }
     setShowDeleteConfirmId(null);
     playSound(800, 0.15, 'sawtooth');
+  };
+
+  const isLinkedToStore = (tc: TelecomCustomer) => {
+    if (!tc.phone || tc.phone.trim() === '') return false;
+    const tcPhoneClean = tc.phone.replace(/\D/g, '');
+    return storeCustomers.some(s => {
+      if (!s.phone || s.phone.trim() === '') return false;
+      const sPhoneClean = s.phone.replace(/\D/g, '');
+      return tc.name.trim().toLowerCase() === s.name.trim().toLowerCase() && tcPhoneClean === sPhoneClean;
+    });
+  };
+
+  const handleSyncTelecomCustomerToStore = (tc: TelecomCustomer) => {
+    const tcPhoneClean = tc.phone ? tc.phone.replace(/\D/g, '') : '';
+    const exists = storeCustomers.some(s => {
+      const sPhoneClean = s.phone ? s.phone.replace(/\D/g, '') : '';
+      return tc.name.trim().toLowerCase() === s.name.trim().toLowerCase() && 
+             (tcPhoneClean !== '' && tcPhoneClean === sPhoneClean);
+    });
+
+    if (exists) {
+      alert(`"${tc.name}" ইতিমধ্যেই জেনারেল স্টোর খাতায় একই নাম ও নাম্বারে যুক্ত আছেন!`);
+      return;
+    }
+
+    let phoneToUse = tc.phone ? tc.phone.trim() : '';
+    if (!phoneToUse) {
+      const inputPhone = window.prompt(`"${tc.name}" গ্রাহকের কোনো মোবাইল নাম্বার নেই। যৌথ খাতা সচল করতে একটি মোবাইল নাম্বার দিন:`);
+      if (inputPhone === null) return;
+      if (!inputPhone.trim()) {
+        alert('মোবাইল নাম্বার ছাড়া যৌথ খাতায় যুক্ত করা যাবে না!');
+        return;
+      }
+      phoneToUse = inputPhone.trim();
+      
+      const updatedTelecom = telecomCustomers.map(cust => {
+        if (cust.id === tc.id) {
+          return { ...cust, phone: phoneToUse };
+        }
+        return cust;
+      });
+      saveTelecomCustomers(updatedTelecom);
+    }
+
+    const confirmMsg = `আপনি কি নিশ্চিত যে আপনি "${tc.name}" (মোবাইল: ${phoneToUse}) গ্রাহকটিকে জেনারেল স্টোর খাতায় যুক্ত করতে চান? এর মাধ্যমে তারা যুক্ত বাকির খাতায় সংযুক্ত হবেন।`;
+    if (window.confirm(confirmMsg)) {
+      const newStoreCustomer: TelecomCustomer = {
+        id: `S-CUST-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: tc.name,
+        phone: phoneToUse,
+        due: 0,
+        transactions: []
+      };
+      
+      const updatedStore = [newStoreCustomer, ...storeCustomers];
+      saveStoreCustomers(updatedStore);
+      playSound(1200, 0.15, 'sine');
+      alert(`"${tc.name}" সফলভাবে জেনারেল স্টোর খাতায় যুক্ত হয়েছে এবং যুক্ত বাকির খাতা সচল হয়েছে!`);
+    }
   };
 
   // Direct manual card stock adjustments
@@ -3294,7 +3355,22 @@ export default function App() {
                                   </button>
                                 </div>
                               </div>
-                              <p className="text-xs text-slate-400 font-medium">মোবাইল: {customer.phone || 'N/A'}</p>
+                              <p className="text-xs text-slate-400 font-medium mb-1.5">মোবাইল: {customer.phone || 'N/A'}</p>
+                              {isLinkedToStore(customer) ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-900/30">
+                                  <CheckCircle size={11} />
+                                  জেনারেল স্টোরে সংযুক্ত (যৌথ খাতা সচল)
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncTelecomCustomerToStore(customer)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-200 cursor-pointer transition-all dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-900/40"
+                                >
+                                  <UserPlus size={11} />
+                                  যৌথ খাতায় যুক্ত করুন
+                                </button>
+                              )}
                             </div>
                             <div className="text-right sm:border-l sm:pl-4 border-slate-200 min-w-[120px]">
                               <span className="text-[10px] text-slate-400 font-bold block uppercase">চলতি বকেয়া (Current Due)</span>

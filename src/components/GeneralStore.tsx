@@ -982,6 +982,70 @@ export default function GeneralStore({
     }
   };
 
+  const isLinkedToTelecom = (sc: StoreCustomer) => {
+    if (!sc.phone || sc.phone.trim() === '') return false;
+    const scPhoneClean = sc.phone.replace(/\D/g, '');
+    return (telecomCustomers || []).some(tc => {
+      if (!tc.phone || tc.phone.trim() === '') return false;
+      const tcPhoneClean = tc.phone.replace(/\D/g, '');
+      return sc.name.trim().toLowerCase() === tc.name.trim().toLowerCase() && tcPhoneClean === scPhoneClean;
+    });
+  };
+
+  const handleSyncStoreCustomerToTelecom = (sc: StoreCustomer) => {
+    const scPhoneClean = sc.phone ? sc.phone.replace(/\D/g, '') : '';
+    const exists = (telecomCustomers || []).some(tc => {
+      const tcPhoneClean = tc.phone ? tc.phone.replace(/\D/g, '') : '';
+      return sc.name.trim().toLowerCase() === tc.name.trim().toLowerCase() && 
+             (scPhoneClean !== '' && scPhoneClean === tcPhoneClean);
+    });
+
+    if (exists) {
+      alert(`"${sc.name}" ইতিমধ্যেই টেলিকম খাতায় একই নাম ও নাম্বারে যুক্ত আছেন!`);
+      return;
+    }
+
+    let phoneToUse = sc.phone ? sc.phone.trim() : '';
+    if (!phoneToUse) {
+      const inputPhone = window.prompt(`"${sc.name}" গ্রাহকের কোনো মোবাইল নাম্বার নেই। যৌথ খাতা সচল করতে একটি মোবাইল নাম্বার দিন:`);
+      if (inputPhone === null) return;
+      if (!inputPhone.trim()) {
+        alert('মোবাইল নাম্বার ছাড়া যৌথ খাতায় যুক্ত করা যাবে না!');
+        return;
+      }
+      phoneToUse = inputPhone.trim();
+      
+      const updatedStore = customers.map(cust => {
+        if (cust.id === sc.id) {
+          return { ...cust, phone: phoneToUse };
+        }
+        return cust;
+      });
+      saveCustomers(updatedStore);
+      if (selectedCustomerDetails?.id === sc.id) {
+        setSelectedCustomerDetails({ ...selectedCustomerDetails, phone: phoneToUse });
+      }
+    }
+
+    const confirmMsg = `আপনি কি নিশ্চিত যে আপনি "${sc.name}" (মোবাইল: ${phoneToUse}) গ্রাহকটিকে টেলিকম খাতায় যুক্ত করতে চান? এর মাধ্যমে তারা যুক্ত বাকির খাতায় সংযুক্ত হবেন।`;
+    if (window.confirm(confirmMsg)) {
+      const newTelecomCustomer: TelecomCustomer = {
+        id: `T-CUST-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: sc.name,
+        phone: phoneToUse,
+        due: 0,
+        transactions: []
+      };
+      
+      if (saveTelecomCustomers && telecomCustomers) {
+        const updatedTelecom = [newTelecomCustomer, ...telecomCustomers];
+        saveTelecomCustomers(updatedTelecom);
+      }
+      playSound(1200, 0.15, 'sine');
+      alert(`"${sc.name}" সফলভাবে টেলিকম খাতায় যুক্ত হয়েছে এবং যুক্ত বাকির খাতা সচল হয়েছে!`);
+    }
+  };
+
   // --- DAILY LEDGER (হিসাব খাতা) STATE ---
   const [purchaseProdName, setPurchaseProdName] = useState<string>('');
   const [purchaseQty, setPurchaseQty] = useState<string>('1');
@@ -2326,6 +2390,20 @@ export default function GeneralStore({
                         </div>
                         
                         <div className="flex items-center gap-1.5">
+                          {isLinkedToTelecom(c) ? (
+                            <span className="p-1.5 text-emerald-600 flex items-center gap-0.5" title="যৌথ খাতায় সংযুক্ত">
+                              <CheckCircle size={14} className="text-emerald-600" />
+                              <span className="text-[10px] font-bold text-emerald-600 hidden md:inline">সংযুক্ত</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSyncStoreCustomerToTelecom(c); }}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 font-sans font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-amber-200 dark:border-amber-900/40"
+                              title="যৌথ খাতায় যুক্ত করুন (টেলিকম খাতাতেও এড হবে)"
+                            >
+                              <UserPlus size={11} /> যৌথ খাতায় যুক্ত
+                            </button>
+                          )}
                           <button
                             onClick={(e) => { e.stopPropagation(); setSelectedCustomerDetails(c); playSound(950, 0.05); }}
                             className="px-3 py-1.5 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-950/80 transition-all flex items-center gap-1 cursor-pointer"
@@ -2368,6 +2446,31 @@ export default function GeneralStore({
                   <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 font-mono text-center">
                     <span className="text-[11px] text-slate-400 font-sans">মোট বকেয়া ব্যালেন্স</span>
                     <strong className="block text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">৳{toBnNum(selectedCustomerDetails.due)}</strong>
+                  </div>
+
+                  {/* Joint Ledger Connection Status */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 block font-bold uppercase tracking-wider">যুক্ত বাকির খাতা সংযোগ (Joint Ledger Connection)</span>
+                    {isLinkedToTelecom(selectedCustomerDetails) ? (
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle size={14} className="text-emerald-500 shrink-0" />
+                        টেলিকম খাতার সাথে যুক্ত আছে (Linked)
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-rose-500 font-semibold flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0 text-rose-500" />
+                          টেলিকম খাতার সাথে যুক্ত নেই
+                        </div>
+                        <button
+                          onClick={() => handleSyncStoreCustomerToTelecom(selectedCustomerDetails)}
+                          className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
+                        >
+                          <UserPlus size={12} />
+                          যৌথ খাতায় যুক্ত করুন
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Free Due Payment Alerts (ফ্রি নোটিশ সেবা) */}
