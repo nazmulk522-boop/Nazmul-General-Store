@@ -772,7 +772,7 @@ export default function GeneralStore({
       const updatedTelecom = telecomCustomers.map(tc => {
         if (tc.id === jCust.telecomCustomer.id) {
           const oldDue = tc.due || 0;
-          const newDue = isPay ? Math.max(0, oldDue - amountNum) : oldDue + amountNum;
+          const newDue = isPay ? (oldDue - amountNum) : oldDue + amountNum;
           
           const newTxn: TelecomCustomerTxn = {
             id: 'txn_' + Date.now(),
@@ -803,7 +803,7 @@ export default function GeneralStore({
       const updatedStore = customers.map(sc => {
         if (sc.id === jCust.storeCustomer.id) {
           const oldDue = sc.due || 0;
-          const newDue = isPay ? Math.max(0, oldDue - amountNum) : oldDue + amountNum;
+          const newDue = isPay ? (oldDue - amountNum) : oldDue + amountNum;
 
           const newTxn: StoreCustomerTxn = {
             id: 'txn_' + Date.now(),
@@ -906,7 +906,7 @@ export default function GeneralStore({
     }
 
     if (received > 0) {
-      currentDue = Math.max(0, currentDue - received);
+      currentDue = currentDue - received;
       updatedTxns.push({
         id: 'TXN-' + Date.now() + '-RC',
         type: 'payment_received',

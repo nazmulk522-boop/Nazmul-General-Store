@@ -630,7 +630,7 @@ export default function App() {
       const updatedTelecom = telecomCustomers.map(cust => {
         if (cust.id === jointCust.telecomCustomer.id) {
           const diff = jointBakiActionType === 'due' ? amt : -amt;
-          const newDue = Math.max(0, cust.due + diff);
+          const newDue = cust.due + diff;
 
           const newTxn: TelecomCustomerTxn = {
             id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -661,7 +661,7 @@ export default function App() {
       const updatedStore = storeCustomers.map(cust => {
         if (cust.id === jointCust.storeCustomer.id) {
           const diff = jointBakiActionType === 'due' ? amt : -amt;
-          const newDue = Math.max(0, cust.due + diff);
+          const newDue = cust.due + diff;
 
           const newTxn = {
             id: `TXN-${Date.now()}-J`,
@@ -1084,7 +1084,7 @@ export default function App() {
     const updatedCustomers = telecomCustomers.map(cust => {
       if (cust.id === customerId) {
         const diff = bakiActionType === 'due' ? amt : -amt;
-        const newDue = Math.max(0, cust.due + diff);
+        const newDue = cust.due + diff;
 
         const newTxn: TelecomCustomerTxn = {
           id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
