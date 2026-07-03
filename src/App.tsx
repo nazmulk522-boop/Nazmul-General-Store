@@ -1403,7 +1403,13 @@ export default function App() {
     setDriveBackUpSuccess(false);
 
     try {
+      const storeProducts = JSON.parse(localStorage.getItem('nazmul_store_products') || '[]');
+      const storeSales = JSON.parse(localStorage.getItem('nazmul_store_sales') || '[]');
+      const storeDailyLedgers = JSON.parse(localStorage.getItem('nazmul_store_daily_ledgers') || '[]');
+      const storePin = localStorage.getItem('nazmul_store_pin') || '';
+
       const backupData = {
+        isFullBackup: true,
         balances,
         transactions,
         purchases,
@@ -1412,6 +1418,13 @@ export default function App() {
         telecomCustomers,
         commissionOffset,
         volumeOffset,
+        generalStore: {
+          products: storeProducts,
+          customers: storeCustomers,
+          sales: storeSales,
+          daily_ledgers: storeDailyLedgers,
+          pin: storePin
+        },
         timestamp: Date.now()
       };
       await uploadBackupToDrive(backupData);
@@ -1433,7 +1446,7 @@ export default function App() {
   const handleDriveBackupRestore = async (fileId: string, fileName: string) => {
     playSound(950, 0.15);
     const confirmed = window.confirm(
-      `সতর্কবার্তা!\n\nআপনি কি নিশ্চিতভাবে "${fileName}" ব্যাকআপ ফাইলটি থেকে ডাটা রিস্টোর করতে চান?\n\nএর ফলে আপনার বর্তমান ফোনের সমস্ত ট্রানজেকশন, ব্যালেন্স এবং স্টক ডিলিট হয়ে ব্যাকআপের ডাটা দিয়ে রিপ্লেস হয়ে যাবে। এই কাজ আর আনডু করা যাবে না!`
+      `⚠️ সতর্কবার্তা!\n\nআপনি কি নিশ্চিতভাবে "${fileName}" ব্যাকআপ ফাইলটি থেকে ডাটা রিস্টোর করতে চান?\n\nএর ফলে আপনার বর্তমান ফোনের সমস্ত ট্রানজেকশন, ব্যালেন্স, স্টক এবং জেনারেল স্টোরের সমস্ত ডাটা মুছে গিয়ে ব্যাকআপের ডাটা দিয়ে রিপ্লেস হয়ে যাবে। এই কাজ আর আনডু করা যাবে না!`
     );
     if (!confirmed) return;
 
@@ -1464,8 +1477,22 @@ export default function App() {
         saveVolumeOffset(backupData.volumeOffset);
       }
 
+      // Restore General Store if present in the Drive Backup
+      if (backupData.isFullBackup && backupData.generalStore) {
+        const gs = backupData.generalStore;
+        if (gs.products) localStorage.setItem('nazmul_store_products', JSON.stringify(gs.products));
+        if (gs.customers) {
+          saveStoreCustomers(gs.customers);
+          localStorage.setItem('nazmul_store_customers', JSON.stringify(gs.customers));
+        }
+        if (gs.sales) localStorage.setItem('nazmul_store_sales', JSON.stringify(gs.sales));
+        if (gs.daily_ledgers) localStorage.setItem('nazmul_store_daily_ledgers', JSON.stringify(gs.daily_ledgers));
+        if (gs.pin) localStorage.setItem('nazmul_store_pin', gs.pin);
+      }
+
       playSound(1200, 0.3);
-      alert("অভিনন্দন! গুগল ড্রাইভ থেকে ডাটা রিস্টোর সফল হয়েছে এবং আপনার ডাটাবেস আপডেট করা হয়েছে।");
+      alert("🎉 অভিনন্দন! গুগল ড্রাইভ থেকে টেলিকম ও জেনারেল স্টোরের সার্বজনীন ফুল ডাটা রিস্টোর সফল হয়েছে। ডাটা সিঙ্ক করতে পেজটি রিলোড করা হচ্ছে...");
+      window.location.reload();
     } catch (err: any) {
       console.error("Restore failed:", err);
       setDriveError("ড্রাইভ ফাইল থেকে ডাটা রিস্টোর করতে সমস্যা হয়েছে। ব্যাকআপ ফাইলটি সঠিক কিনা নিশ্চিত করুন।");
@@ -1622,6 +1649,111 @@ export default function App() {
     dlAnchorElem.setAttribute("href", dataStr);
     dlAnchorElem.setAttribute("download", `nazmul_telecom_backup_raw_${Date.now()}.json`);
     dlAnchorElem.click();
+  };
+
+  // Download full combined backup (Telecom + General Store)
+  const downloadFullJSONBackup = () => {
+    try {
+      const storeProducts = JSON.parse(localStorage.getItem('nazmul_store_products') || '[]');
+      const storeSales = JSON.parse(localStorage.getItem('nazmul_store_sales') || '[]');
+      const storeDailyLedgers = JSON.parse(localStorage.getItem('nazmul_store_daily_ledgers') || '[]');
+      const storePin = localStorage.getItem('nazmul_store_pin') || '';
+
+      const fullData = {
+        isFullBackup: true,
+        telecom: {
+          balances,
+          transactions,
+          purchases,
+          cardStock,
+          cardUnits,
+          telecomCustomers,
+          commissionOffset,
+          volumeOffset
+        },
+        generalStore: {
+          products: storeProducts,
+          customers: storeCustomers,
+          sales: storeSales,
+          daily_ledgers: storeDailyLedgers,
+          pin: storePin
+        },
+        timestamp: Date.now()
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullData, null, 2));
+      const dlAnchorElem = document.createElement('a');
+      dlAnchorElem.setAttribute("href", dataStr);
+      dlAnchorElem.setAttribute("download", `nazmul_full_backup_telecom_store_${Date.now()}.json`);
+      dlAnchorElem.click();
+      playSound(1200, 0.15, 'sine');
+    } catch (err) {
+      alert('ফুল ব্যাকআপ ফাইল তৈরি করতে সমস্যা হয়েছে!');
+    }
+  };
+
+  // Import full combined backup (Telecom + General Store)
+  const handleFullBackupUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      `⚠️ সতর্কবার্তা!\n\nআপনি কি নিশ্চিতভাবে এই সার্বজনীন ফুল ব্যাকআপ ফাইলটি রিস্টোর করতে চান?\n\nএর ফলে আপনার বর্তমান নাজমুল টেলিকম এবং জেনারেল স্টোরের সমস্ত ডাটা মুছে গিয়ে ব্যাকআপের ডাটা দিয়ে প্রতিস্থাপিত হবে। এই কাজ আর পূর্বাবস্থায় ফিরিয়ে আনা যাবে না!`
+    );
+    if (!confirmed) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.isFullBackup && data.telecom && data.generalStore) {
+          // Restore Telecom
+          const t = data.telecom;
+          if (t.balances) saveBalances(t.balances);
+          if (t.cardUnits) saveCardUnits(t.cardUnits);
+          else if (t.cardStock) reconstructCardUnitsFromStock(t.cardStock);
+          if (t.transactions) saveTransactions(t.transactions);
+          if (t.purchases) savePurchases(t.purchases);
+          if (t.telecomCustomers) saveTelecomCustomers(t.telecomCustomers);
+          if (typeof t.commissionOffset === 'number') saveCommissionOffset(t.commissionOffset);
+          if (typeof t.volumeOffset === 'number') saveVolumeOffset(t.volumeOffset);
+
+          // Restore General Store
+          const gs = data.generalStore;
+          if (gs.products) localStorage.setItem('nazmul_store_products', JSON.stringify(gs.products));
+          if (gs.customers) {
+            saveStoreCustomers(gs.customers);
+            localStorage.setItem('nazmul_store_customers', JSON.stringify(gs.customers));
+          }
+          if (gs.sales) localStorage.setItem('nazmul_store_sales', JSON.stringify(gs.sales));
+          if (gs.daily_ledgers) localStorage.setItem('nazmul_store_daily_ledgers', JSON.stringify(gs.daily_ledgers));
+          if (gs.pin) localStorage.setItem('nazmul_store_pin', gs.pin);
+
+          playSound(1500, 0.4, 'sine');
+          alert('🎉 অভিনন্দন! নাজমুল টেলিকম ও জেনারেল স্টোরের সার্বজনীন ফুল ব্যাকআপ সফলভাবে রিস্টোর হয়েছে। ডাটা সিঙ্ক করার জন্য অ্যাপটি রিলোড করা হচ্ছে...');
+          window.location.reload();
+        } else {
+          // Fallback if legacy
+          if (data.balances && data.transactions) {
+            saveBalances(data.balances);
+            if (data.cardUnits) saveCardUnits(data.cardUnits);
+            else if (data.cardStock) reconstructCardUnitsFromStock(data.cardStock);
+            if (data.transactions) saveTransactions(data.transactions);
+            if (data.purchases) savePurchases(data.purchases);
+            if (data.telecomCustomers) saveTelecomCustomers(data.telecomCustomers);
+
+            playSound(1500, 0.4, 'sine');
+            alert('টেলিকম ব্যাকআপ ফাইল শনাক্ত করা হয়েছে এবং শুধুমাত্র টেলিকম ডাটা সফলভাবে রিস্টোর হয়েছে। স্টোরের ডাটা অপরিবর্তিত রয়েছে।');
+            window.location.reload();
+          } else {
+            alert('ভুল ফাইল ফরম্যাট! এটি কোনো সঠিক নাজমুল ব্যাকআপ ফাইল নয়।');
+          }
+        }
+      } catch (err) {
+        alert('ফাইল রিড করার সময় গোলযোগ দেখা দিয়েছে।');
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Delete transaction record with verification sound
@@ -3124,11 +3256,43 @@ export default function App() {
                 </div>
               )}
 
+              {/* Universal Full Backup (Telecom + General Store) - New request */}
+              <div className="p-5 rounded-xl border border-dashed border-amber-300 bg-amber-50/20 space-y-3.5">
+                <div className="flex gap-2 items-start">
+                  <span className="text-xl">🌟</span>
+                  <div>
+                    <h4 className="text-xs font-black text-amber-900 dark:text-amber-300">সার্বজনীন ফুল ব্যাকআপ ও রিস্টোর (টেলিকম + জেনারেল স্টোর)</h4>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      এক ক্লিকে টেলিকম খাতা এবং জেনারেল স্টোর উভয়ের সম্পূর্ণ তথ্য একসাথে সুরক্ষিতভাবে ব্যাকআপ ডাউনলোড করুন অথবা অন্য ডিভাইসে রিস্টোর করুন।
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <button
+                    onClick={downloadFullJSONBackup}
+                    className="py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <ArrowDownToLine size={13} />
+                    ফুল ব্যাকআপ ফাইল ডাউনলোড (.json)
+                  </button>
+                  <label className="border border-amber-300 bg-white hover:bg-amber-50 text-[11px] font-bold text-amber-800 rounded-lg transition-colors cursor-pointer flex items-center justify-center text-center py-2.5 shadow-xs">
+                    <CloudUpload size={13} className="mr-1 shrink-0 text-amber-700" />
+                    ফুল ব্যাকআপ ফাইল আপলোড (.json)
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleFullBackupUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
               {/* Raw JSON database export-import backup panel for actual transfers */}
               <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                <span className="text-[10px] font-black text-slate-500 uppercase block">র ব্যাকআপ ইউটিলিটি ফাইলের মাধ্যমে ট্রান্সফার (Manual Data Transfer):</span>
+                <span className="text-[10px] font-black text-slate-500 uppercase block">টেলিকম ব্যাকআপ ইউটিলিটি ফাইলের মাধ্যমে ট্রান্সফার (Telecom Only):</span>
                 <p className="text-[10px] text-slate-400">
-                  অন্য কোনো ফোনে নাজমুল টেলিকমের আপনার এই হিস্ট্রি ট্রান্সফার করতে এখানে ফাইল এক্সপোর্ট করুন, নতুন ফোনে ওই ফাইল আপলোড দিলে সব ডাটা সঙ্গে সঙ্গে কপি হয়ে যাবে।
+                  শুধুমাত্র নাজমুল টেলিকমের আপনার এই হিস্ট্রি ট্রান্সফার করতে এখানে ফাইল এক্সপোর্ট করুন, নতুন ফোনে ওই ফাইল আপলোড দিলে সব ডাটা সঙ্গে সঙ্গে কপি হয়ে যাবে।
                 </p>
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <button
