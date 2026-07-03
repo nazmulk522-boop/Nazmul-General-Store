@@ -41,7 +41,9 @@ import {
   BarChart3,
   RotateCcw,
   Sun,
-  Moon
+  Moon,
+  MessageCircle,
+  Users
 } from 'lucide-react';
 import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit, TelecomCustomer, TelecomCustomerTxn } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
@@ -387,6 +389,24 @@ export default function App() {
     ];
   });
 
+  // State: General Store Customers (Credit ledger) - lifted for "যুক্ত বাকির খাতা"
+  const [storeCustomers, setStoreCustomers] = useState<TelecomCustomer[]>(() => {
+    const saved = localStorage.getItem('nazmul_store_customers');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      { id: 'c1', name: 'রহিম মিঞা (ফ্লেক্সিলোড)', phone: '01711223344', due: 1229, transactions: [{ id: 't1', type: 'sale_due', amount: 1229, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
+      { id: 'c2', name: 'করিম হোসেন (কার্ড)', phone: '01815556677', due: 311, transactions: [{ id: 't2', type: 'sale_due', amount: 311, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
+      { id: 'c3', name: 'সজীব আহমেদ (বিকাশ)', phone: '01912345678', due: 50, transactions: [{ id: 't3', type: 'sale_due', amount: 50, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] }
+    ];
+  });
+
+  const saveStoreCustomers = (newC: TelecomCustomer[]) => {
+    setStoreCustomers(newC);
+    localStorage.setItem('nazmul_store_customers', JSON.stringify(newC));
+  };
+
   // General App State
   const [activeAccount, setActiveAccount] = useState<AccountKey>('bkash');
   const [activeAction, setActiveAction] = useState<TransactionActionType>('cash_out');
@@ -447,6 +467,14 @@ export default function App() {
   const [bakiFormNote, setBakiFormNote] = useState<string>('');
   const [editingBakiCustomer, setEditingBakiCustomer] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
+
+  // Form Inputs: Joint Due Book
+  const [selectedJointCustomerId, setSelectedJointCustomerId] = useState<string | null>(null);
+  const [jointBakiFormAmount, setJointBakiFormAmount] = useState<string>('');
+  const [jointBakiFormNote, setJointBakiFormNote] = useState<string>('');
+  const [jointBakiFormLedger, setJointBakiFormLedger] = useState<'telecom' | 'store'>('telecom');
+  const [jointBakiActionType, setJointBakiActionType] = useState<'due' | 'payment'>('payment');
+  const [jointSearch, setJointSearch] = useState<string>('');
 
   // Form Inputs: Manual Card Stock Edit
   const [showCardEditModal, setShowCardEditModal] = useState<{
@@ -538,6 +566,123 @@ export default function App() {
   const saveTelecomCustomers = (newC: TelecomCustomer[]) => {
     setTelecomCustomers(newC);
     localStorage.setItem('nazmul_telecom_customers', JSON.stringify(newC));
+  };
+
+  const jointCustomers = useMemo(() => {
+    const list: {
+      id: string;
+      name: string;
+      phone: string;
+      telecomCustomer: TelecomCustomer;
+      storeCustomer: TelecomCustomer;
+      telecomDue: number;
+      storeDue: number;
+      totalDue: number;
+    }[] = [];
+
+    telecomCustomers.forEach(tc => {
+      if (!tc.phone || tc.phone.trim() === '') return;
+      const tcPhoneClean = tc.phone.replace(/\D/g, '');
+      
+      const sc = storeCustomers.find(s => {
+        if (!s.phone || s.phone.trim() === '') return false;
+        const sPhoneClean = s.phone.replace(/\D/g, '');
+        return tc.name.trim().toLowerCase() === s.name.trim().toLowerCase() && tcPhoneClean === sPhoneClean;
+      });
+
+      if (sc) {
+        list.push({
+          id: `joint-${tc.id}-${sc.id}`,
+          name: tc.name,
+          phone: tc.phone,
+          telecomCustomer: tc,
+          storeCustomer: sc,
+          telecomDue: tc.due,
+          storeDue: sc.due,
+          totalDue: tc.due + sc.due
+        });
+      }
+    });
+
+    return list;
+  }, [telecomCustomers, storeCustomers]);
+
+  const handleJointBakiSubmit = (e: FormEvent, jointCustId: string) => {
+    e.preventDefault();
+    const amt = parseFloat(jointBakiFormAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('দয়া করে সঠিক টাকার পরিমাণ লিখুন!');
+      return;
+    }
+
+    const jointCust = jointCustomers.find(j => j.id === jointCustId);
+    if (!jointCust) {
+      alert('কাস্টমার খুঁজে পাওয়া যায়নি!');
+      return;
+    }
+
+    if (jointBakiFormLedger === 'telecom') {
+      const updatedTelecom = telecomCustomers.map(cust => {
+        if (cust.id === jointCust.telecomCustomer.id) {
+          const diff = jointBakiActionType === 'due' ? amt : -amt;
+          const newDue = Math.max(0, cust.due + diff);
+
+          const newTxn: TelecomCustomerTxn = {
+            id: `T-TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            type: jointBakiActionType === 'due' ? 'sale_due' : 'payment_received',
+            amount: amt,
+            date: new Date().toISOString().split('T')[0],
+            note: jointBakiFormNote.trim() || (jointBakiActionType === 'payment' ? 'যৌথ খাতা থেকে জমা পরিশোধ' : 'যৌথ খাতা থেকে নতুন বাকি'),
+            timestamp: Date.now()
+          };
+
+          return {
+            ...cust,
+            due: newDue,
+            transactions: [newTxn, ...cust.transactions]
+          };
+        }
+        return cust;
+      });
+
+      if (jointBakiActionType === 'payment') {
+        const updatedBalances = { ...balances };
+        updatedBalances.cash += amt;
+        saveBalances(updatedBalances);
+      }
+
+      saveTelecomCustomers(updatedTelecom);
+    } else {
+      const updatedStore = storeCustomers.map(cust => {
+        if (cust.id === jointCust.storeCustomer.id) {
+          const diff = jointBakiActionType === 'due' ? amt : -amt;
+          const newDue = Math.max(0, cust.due + diff);
+
+          const newTxn = {
+            id: `TXN-${Date.now()}-J`,
+            type: jointBakiActionType === 'due' ? 'sale_due' as const : 'payment_received' as const,
+            amount: amt,
+            date: new Date().toISOString().split('T')[0],
+            note: jointBakiFormNote.trim() || (jointBakiActionType === 'payment' ? 'যৌথ খাতা থেকে জমা গ্রহণ' : 'যৌথ খাতা থেকে বাকি দেওয়া হলো'),
+            timestamp: Date.now()
+          };
+
+          return {
+            ...cust,
+            due: newDue,
+            transactions: [newTxn, ...cust.transactions]
+          };
+        }
+        return cust;
+      });
+
+      saveStoreCustomers(updatedStore);
+    }
+
+    setJointBakiFormAmount('');
+    setJointBakiFormNote('');
+    playSound(1200, 0.15, 'sine');
+    alert('লেনদেন সফলভাবে সম্পন্ন ও যুক্ত খাতা আপডেট হয়েছে!');
   };
 
   // Card stock total valuation helper based on actual buy prices of remaining stock
@@ -1521,6 +1666,10 @@ export default function App() {
           soundEnabled={soundEnabled} 
           playSound={playSound}
           onSwitchToTelecom={() => { setAppMode('telecom'); playSound(1000, 0.1); }}
+          telecomCustomers={telecomCustomers}
+          saveTelecomCustomers={saveTelecomCustomers}
+          storeCustomers={storeCustomers}
+          saveStoreCustomers={saveStoreCustomers}
         />
       ) : (
         <>
@@ -2289,6 +2438,13 @@ export default function App() {
             >
               <Wallet size={15} />
               বাকি খাতা (Due Ledger)
+            </button>
+            <button
+              onClick={() => { setDashboardTab('joint_baki'); playSound(920, 0.05); }}
+              className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${dashboardTab === 'joint_baki' ? 'bg-indigo-600 text-white shadow' : 'text-indigo-600 hover:bg-indigo-50/30'}`}
+            >
+              <Layers size={15} />
+              যুক্ত বাকির খাতা (Joint Ledger)
             </button>
           </div>
 
@@ -3245,7 +3401,7 @@ export default function App() {
                             <span className="text-[10px] font-black text-amber-800 uppercase block">🔔 বকেয়া তাগাদা নোটিশ (Due Payment Alert):</span>
                             
                             <div className="bg-white p-2.5 rounded-xl border border-amber-100 text-[11px] font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                              {`প্রিয় ${customer.name}, \nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা। \nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো। \nধন্যবাদ!\n\nনাজমুল টেলিকম ও জেনারেল স্টোর`}
+                              {`প্রিয় ${customer.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBengaliNumber(customer.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম \nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`}
                             </div>
 
                             <div className="grid grid-cols-3 gap-2">
@@ -3253,7 +3409,7 @@ export default function App() {
                                 href={`https://api.whatsapp.com/send?phone=${
                                   (((customer.phone || '').replace(/\D/g, '').startsWith('0') ? '88' : '') + (customer.phone || '').replace(/\D/g, ''))
                                 }&text=${encodeURIComponent(
-                                  `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম ও জেনারেল স্টোর`
+                                  `প্রিয় ${customer.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBengaliNumber(customer.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম \nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`
                                 )}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -3263,7 +3419,7 @@ export default function App() {
                               </a>
                               <a
                                 href={`sms:${customer.phone || ''}?body=${encodeURIComponent(
-                                  `Prio ${customer.name}, Nazmul Telecom o General Store e apnar baki holo ${customer.due} taka. Baki porishodh korar anurodh roilo. Dhonnobad! Nazmul Telecom.`
+                                  `Prio ${customer.name}, Nazmul Telecom e apnar baki holo ${customer.due} taka. Baki porishodh korar anurodh roilo. Dhonnobad! Nazmul Telecom.`
                                 )}`}
                                 className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors text-center"
                               >
@@ -3271,7 +3427,7 @@ export default function App() {
                               </a>
                               <button
                                 onClick={() => {
-                                  const message = `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোর ও টেলিকম এ আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.due} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম ও জেনারেল স্টোর`;
+                                  const message = `প্রিয় ${customer.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${toBengaliNumber(customer.due)} টাকা।\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম \nসাবানা রোড, বনবাড়িয়া\nসিরাজগঞ্জ সদর, সিরাজগঞ্জ`;
                                   navigator.clipboard.writeText(message);
                                   alert(`নোটিশ মেসেজ কপি হয়েছে!`);
                                   playSound(1300, 0.1);
@@ -3334,6 +3490,318 @@ export default function App() {
                       <p className="text-[10px] text-slate-400">তার বিস্তারিত খাতা ও পূর্ববর্তী বিবরণ এখানে প্রদর্শিত হবে।</p>
                     </div>
                   )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {dashboardTab === 'joint_baki' && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                    <Layers className="text-indigo-600" size={20} />
+                    যুক্ত বাকির খাতা (Joint Credit Ledger)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    টেলিকম ও জেনারেল স্টোরে একই নাম ও একই মোবাইল নাম্বার থাকা কাস্টমারদের যৌথ বকেয়া হিসাব
+                  </p>
+                </div>
+                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-3">
+                  <div className="p-2 bg-indigo-600 rounded-lg text-white">
+                    <Coins size={16} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold block">মোট যৌথ বকেয়া পাওনা</span>
+                    <strong className="text-sm font-mono font-black text-indigo-900">
+                      ৳{jointCustomers.reduce((acc, curr) => acc + curr.totalDue, 0)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Panel: Joint Customers List */}
+                <div className="lg:col-span-1 border border-slate-100 rounded-2xl p-4 space-y-4">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Search size={14} />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="কাস্টমারের নাম বা ফোন খুঁজুন..."
+                      value={jointSearch}
+                      onChange={e => setJointSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-800 focus:outline-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-2 overflow-y-auto max-h-[450px] pr-1">
+                    {(() => {
+                      const filtered = jointCustomers.filter(c =>
+                        c.name.toLowerCase().includes(jointSearch.toLowerCase()) ||
+                        c.phone.includes(jointSearch)
+                      );
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-12 text-center text-slate-400 space-y-2">
+                            <Users size={28} className="mx-auto text-slate-300" />
+                            <p className="text-xs font-bold">কোন যৌথ কাস্টমার মেলেনি</p>
+                            <p className="text-[10px] text-slate-400 px-4">
+                              যৌথ খাতা সচল করতে কাস্টমারের নাম এবং মোবাইল নম্বর উভয় খাতায় (টেলিকম ও জেনারেল স্টোর) একই হতে হবে।
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return filtered.map(c => {
+                        const isSelected = selectedJointCustomerId === c.id;
+                        return (
+                          <div
+                            key={c.id}
+                            onClick={() => { setSelectedJointCustomerId(c.id); playSound(950, 0.05); }}
+                            className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-50 border-indigo-200 shadow-sm'
+                                : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-extrabold text-xs text-slate-800">{c.name}</h4>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{c.phone}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-xs font-black text-slate-800 font-mono">৳{c.totalDue}</span>
+                                <span className="block text-[9px] text-indigo-600 font-bold mt-0.5">টোটাল বাকি</span>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-dashed border-slate-100 text-[9px]">
+                              <div>
+                                <span className="text-slate-400 block">📱 টেলিকম</span>
+                                <strong className="text-slate-600 font-mono">৳{c.telecomDue}</strong>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-slate-400 block">🏪 স্টোর</span>
+                                <strong className="text-slate-600 font-mono">৳{c.storeDue}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Right Panel: Selected Customer Ledger details */}
+                <div className="lg:col-span-2 space-y-6">
+                  {(() => {
+                    const customer = jointCustomers.find(j => j.id === selectedJointCustomerId);
+                    if (!customer) {
+                      return (
+                        <div className="h-full border border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center py-24 text-slate-400 space-y-2">
+                          <Layers size={36} className="text-slate-300 animate-pulse" />
+                          <p className="text-xs font-bold">অনুগ্রহ করে বাম পাশের তালিকা থেকে কাস্টমার নির্বাচন করুন।</p>
+                          <p className="text-[10px] text-slate-400">তার যৌথ খাতার বিস্তারিত বিবরণ ও জমা/বাকি খতিয়ান এখানে প্রদর্শিত হবে।</p>
+                        </div>
+                      );
+                    }
+
+                    // Combined transactions
+                    const telecomTxns = (customer.telecomCustomer.transactions || []).map(t => ({ ...t, source: 'telecom' as const }));
+                    const storeTxns = (customer.storeCustomer.transactions || []).map(t => ({ ...t, source: 'store' as const }));
+                    const combinedTxns = [...telecomTxns, ...storeTxns].sort((a, b) => b.timestamp - a.timestamp);
+
+                    // Message Templates
+                    const wpMessage = `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোরে আপনার বকেয়া বাকির পরিমাণ হচ্ছে ৳${customer.storeDue} টাকা।\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমান হচ্ছে ৳${customer.telecomDue} টাকা।\nআপনার মোট বকেয়া হচ্ছে ৳${customer.totalDue}\nবকেয়া টাকাটি দ্রুত পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!`;
+                    const wpUrl = `https://api.whatsapp.com/send?phone=88${customer.phone}&text=${encodeURIComponent(wpMessage)}`;
+
+                    return (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Profile Banner */}
+                        <div className="p-5 bg-slate-900 text-white rounded-2xl shadow-md border-b-4 border-indigo-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-widest bg-indigo-600 px-2.5 py-0.5 rounded-full text-white">যুক্ত কাস্টমার প্রোফাইল</span>
+                            <h3 className="text-base font-black mt-1.5">{customer.name}</h3>
+                            <p className="text-xs text-slate-400 font-mono font-medium mt-0.5">{customer.phone}</p>
+                          </div>
+                          <div className="flex gap-4">
+                            <div className="text-center px-3 py-1.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block font-bold">📱 টেলিকম বাকি</span>
+                              <strong className="text-xs text-rose-400 font-mono">৳{customer.telecomDue}</strong>
+                            </div>
+                            <div className="text-center px-3 py-1.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block font-bold">🏪 জেনারেল স্টোর বাকি</span>
+                              <strong className="text-xs text-amber-400 font-mono">৳{customer.storeDue}</strong>
+                            </div>
+                            <div className="text-center px-4 py-1.5 bg-indigo-950/40 rounded-xl border border-indigo-800/50">
+                              <span className="text-[9px] text-indigo-300 block font-bold">💸 মোট বকেয়া</span>
+                              <strong className="text-sm text-indigo-400 font-mono font-black">৳{customer.totalDue}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Middle grid: Form & WhatsApp Preview */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Payment Form */}
+                          <div className="border border-slate-150 rounded-2xl p-4 bg-slate-50/50 space-y-3.5">
+                            <h4 className="text-xs font-extrabold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                              <Coins size={14} className="text-emerald-600" />
+                              লেনদেন সংরক্ষণ ও পরিশোধ খাতা
+                            </h4>
+                            <form onSubmit={(e) => handleJointBakiSubmit(e, customer.id)} className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] text-slate-500 font-bold mb-1">লেনদেনের ধরণ (Select Type)</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setJointBakiActionType('payment'); playSound(950, 0.05); }}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                                      jointBakiActionType === 'payment'
+                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    💵 বকেয়া পরিশোধ (Cash In)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setJointBakiActionType('due'); playSound(950, 0.05); }}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                                      jointBakiActionType === 'due'
+                                        ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    📝 নতুন বাকি (Due Out)
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 font-bold mb-1">খাতা নির্বাচন (Select Book)</label>
+                                  <select
+                                    value={jointBakiFormLedger}
+                                    onChange={(e) => { setJointBakiFormLedger(e.target.value as 'telecom' | 'store'); playSound(950, 0.05); }}
+                                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-800"
+                                  >
+                                    <option value="telecom">📱 টেলিকম খাতা</option>
+                                    <option value="store">🏪 জেনারেল স্টোর খাতা</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 font-bold mb-1">টাকার পরিমাণ</label>
+                                  <input
+                                    type="number"
+                                    placeholder="৳ টাকার অংক"
+                                    value={jointBakiFormAmount}
+                                    onChange={e => setJointBakiFormAmount(e.target.value)}
+                                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-indigo-600 font-mono"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] text-slate-500 font-bold mb-1">বিবরণ / নোট (ঐচ্ছিক)</label>
+                                <input
+                                  type="text"
+                                  placeholder="যেমন: বিকাশ চার্জ পরিশোধ, ডাল বাকি"
+                                  value={jointBakiFormNote}
+                                  onChange={e => setJointBakiFormNote(e.target.value)}
+                                  className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-indigo-600"
+                                />
+                              </div>
+
+                              <button
+                                type="submit"
+                                className={`w-full py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                                  jointBakiActionType === 'payment'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                                    : 'bg-rose-600 hover:bg-rose-700'
+                                }`}
+                              >
+                                <Check size={14} />
+                                লেনদেন সম্পন্ন করুন ({jointBakiFormLedger === 'telecom' ? 'টেলিকম' : 'স্টোর'})
+                              </button>
+                            </form>
+                          </div>
+
+                          {/* WhatsApp Reminder Preview */}
+                          <div className="border border-slate-150 rounded-2xl p-4 bg-amber-50/20 space-y-3 flex flex-col justify-between">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-amber-800 border-b border-amber-100/50 pb-2 flex items-center gap-1.5">
+                                <MessageCircle size={14} className="text-amber-600" />
+                                বকেয়া তাগাদা মেসেজ প্রিভিউ (WhatsApp)
+                              </h4>
+                              <div className="p-3 bg-white border border-amber-100 rounded-xl font-sans text-[11px] leading-relaxed text-slate-700 mt-2 text-left whitespace-pre-wrap select-all shadow-sm">
+                                {wpMessage}
+                              </div>
+                            </div>
+                            <a
+                              href={wpUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={() => playSound(1050, 0.08)}
+                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all mt-3"
+                            >
+                              <MessageCircle size={14} className="animate-pulse" />
+                              WhatsApp এ মেসেজ পাঠান
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Bottom: Transaction Statement */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                            <History size={14} className="text-indigo-600" />
+                            যৌথ লেনদেনের বিবরণী (Combined Transaction History)
+                          </h4>
+                          <div className="space-y-2 overflow-y-auto max-h-[250px] pr-1">
+                            {combinedTxns.length === 0 ? (
+                              <div className="py-8 text-center text-slate-400 text-xs border border-dashed border-slate-100 rounded-xl">
+                                কোন পূর্ববর্তী লেনদেন পাওয়া যায়নি।
+                              </div>
+                            ) : (
+                              combinedTxns.map(t => {
+                                const isDue = t.type === 'sale_due';
+                                return (
+                                  <div
+                                    key={t.id}
+                                    className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex justify-between items-center text-xs"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-full ${
+                                        t.source === 'telecom'
+                                          ? 'bg-indigo-100 text-indigo-700'
+                                          : 'bg-emerald-100 text-emerald-700'
+                                      }`}>
+                                        {t.source === 'telecom' ? '📱 টেলিকম' : '🏪 স্টোর'}
+                                      </span>
+                                      <div>
+                                        <h5 className="font-extrabold text-slate-800">{t.note || (isDue ? 'বাকি খতিয়ান' : 'জমা পরিশোধ')}</h5>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">
+                                          {t.date}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`font-mono font-black text-xs md:text-sm ${isDue ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        {isDue ? '+' : '-'} ৳{t.amount}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
