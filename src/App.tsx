@@ -43,7 +43,9 @@ import {
   Sun,
   Moon,
   MessageCircle,
-  Users
+  Users,
+  Mail,
+  Send
 } from 'lucide-react';
 import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit, TelecomCustomer, TelecomCustomerTxn } from './types';
 import { BANGLADESHI_OPERATORS } from './data';
@@ -475,6 +477,7 @@ export default function App() {
   const [jointBakiFormLedger, setJointBakiFormLedger] = useState<'telecom' | 'store'>('telecom');
   const [jointBakiActionType, setJointBakiActionType] = useState<'due' | 'payment'>('payment');
   const [jointSearch, setJointSearch] = useState<string>('');
+  const [jointBakiCopied, setJointBakiCopied] = useState<boolean>(false);
 
   // Form Inputs: Manual Card Stock Edit
   const [showCardEditModal, setShowCardEditModal] = useState<{
@@ -3729,27 +3732,96 @@ export default function App() {
                             </form>
                           </div>
 
-                          {/* WhatsApp Reminder Preview */}
+                          {/* WhatsApp & expanded messaging options Reminder Preview */}
                           <div className="border border-slate-150 rounded-2xl p-4 bg-amber-50/20 space-y-3 flex flex-col justify-between">
                             <div>
-                              <h4 className="text-xs font-extrabold text-amber-800 border-b border-amber-100/50 pb-2 flex items-center gap-1.5">
-                                <MessageCircle size={14} className="text-amber-600" />
-                                বকেয়া তাগাদা মেসেজ প্রিভিউ (WhatsApp)
+                              <h4 className="text-xs font-extrabold text-amber-800 border-b border-amber-100/50 pb-2 flex items-center justify-between">
+                                <span className="flex items-center gap-1.5">
+                                  <MessageCircle size={14} className="text-amber-600" />
+                                  বকেয়া তাগাদা মেসেজ প্রিভিউ (Message Preview)
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(wpMessage);
+                                    setJointBakiCopied(true);
+                                    playSound(1050, 0.08);
+                                    setTimeout(() => setJointBakiCopied(false), 2000);
+                                  }}
+                                  className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 rounded flex items-center gap-1 font-bold transition-all cursor-pointer"
+                                >
+                                  <Copy size={10} />
+                                  {jointBakiCopied ? 'কপি হয়েছে!' : 'মেসেজ কপি'}
+                                </button>
                               </h4>
                               <div className="p-3 bg-white border border-amber-100 rounded-xl font-sans text-[11px] leading-relaxed text-slate-700 mt-2 text-left whitespace-pre-wrap select-all shadow-sm">
                                 {wpMessage}
                               </div>
                             </div>
-                            <a
-                              href={wpUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={() => playSound(1050, 0.08)}
-                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all mt-3"
-                            >
-                              <MessageCircle size={14} className="animate-pulse" />
-                              WhatsApp এ মেসেজ পাঠান
-                            </a>
+
+                            <div className="space-y-2 mt-3">
+                              <span className="block text-[10px] text-slate-400 font-bold">তাগাদা পাঠানোর মাধ্যম নির্বাচন করুন:</span>
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* WhatsApp */}
+                                <a
+                                  href={wpUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={() => playSound(1050, 0.08)}
+                                  className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer text-center"
+                                >
+                                  <MessageCircle size={13} />
+                                  হোয়াটসঅ্যাপ (WhatsApp)
+                                </a>
+
+                                {/* SIM SMS */}
+                                <a
+                                  href={`sms:${customer.phone}?body=${encodeURIComponent(wpMessage)}`}
+                                  onClick={() => playSound(1050, 0.08)}
+                                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer text-center"
+                                >
+                                  <Smartphone size={13} />
+                                  সিমে এসএমএস (SMS)
+                                </a>
+
+                                {/* Email */}
+                                <a
+                                  href={`mailto:?subject=${encodeURIComponent('বকেয়া পরিশোধের তাগাদা - নাজমুল টেলিকম ও জেনারেল স্টোর')}&body=${encodeURIComponent(wpMessage)}`}
+                                  onClick={() => playSound(1050, 0.08)}
+                                  className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer text-center"
+                                >
+                                  <Mail size={13} />
+                                  ইমেইল পাঠান (Email)
+                                </a>
+
+                                {/* Telegram */}
+                                <a
+                                  href={`https://t.me/share/url?url=&text=${encodeURIComponent(wpMessage)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={() => playSound(1050, 0.08)}
+                                  className="py-2.5 px-3 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer text-center"
+                                >
+                                  <Send size={13} />
+                                  টেলিগ্রাম (Telegram)
+                                </a>
+                              </div>
+
+                              {/* Copy to clipboard fallback */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(wpMessage);
+                                  setJointBakiCopied(true);
+                                  playSound(1050, 0.08);
+                                  setTimeout(() => setJointBakiCopied(false), 2000);
+                                }}
+                                className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer mt-1"
+                              >
+                                <Copy size={13} />
+                                {jointBakiCopied ? 'মেসেজ ক্লিপবোর্ডে কপি হয়েছে!' : 'মেসেজ কপি করুন (Messenger, Imo ইত্যাদির জন্য)'}
+                              </button>
+                            </div>
                           </div>
                         </div>
 
