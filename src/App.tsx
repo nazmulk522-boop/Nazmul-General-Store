@@ -57,7 +57,11 @@ import {
   ChevronRight,
   Bell,
   Phone,
-  X
+  X,
+  Lock,
+  Unlock,
+  Key,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   AccountKey, 
@@ -191,6 +195,19 @@ export const downloadPNG = async (elementId: string, filename: string) => {
 };
 
 export default function App() {
+  // Master App-Level Authentication / PIN Lock State
+  const [appPinVerified, setAppPinVerified] = useState<boolean>(() => {
+    return sessionStorage.getItem('nazmul_master_auth_verified') === 'true';
+  });
+  const [masterPin, setMasterPin] = useState<string>(() => {
+    return localStorage.getItem('nazmul_master_pin') || localStorage.getItem('nazmul_store_pin') || '1234';
+  });
+  const [masterPinInput, setMasterPinInput] = useState<string>('');
+  const [masterPinError, setMasterPinError] = useState<boolean>(false);
+  const [showMasterPinModal, setShowMasterPinModal] = useState<boolean>(false);
+  const [oldMasterPinInput, setOldMasterPinInput] = useState<string>('');
+  const [newMasterPinInput, setNewMasterPinInput] = useState<string>('');
+
   // App Mode State: telecom vs general_store
   const [appMode, setAppMode] = useState<'telecom' | 'general_store'>(() => {
     const saved = localStorage.getItem('nazmul_app_mode');
@@ -1807,6 +1824,109 @@ export default function App() {
     }
   };
 
+  // Multi-tab Storage Synchronization: Real-time update across browser tabs
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'nazmul_telecom_balances' && e.newValue) {
+        try { setBalances(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_telecom_transactions' && e.newValue) {
+        try { setTransactions(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_telecom_purchases' && e.newValue) {
+        try { setPurchases(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_telecom_customers' && e.newValue) {
+        try { setTelecomCustomers(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_store_customers' && e.newValue) {
+        try { setStoreCustomers(JSON.parse(e.newValue)); } catch (err) {}
+      } else if ((e.key === 'nazmul_master_pin' || e.key === 'nazmul_store_pin') && e.newValue) {
+        setMasterPin(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Master PIN Submit
+  const handleMasterPinSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (masterPinInput === masterPin) {
+      setAppPinVerified(true);
+      sessionStorage.setItem('nazmul_master_auth_verified', 'true');
+      sessionStorage.setItem('nazmul_store_auth_verified', 'true');
+      setMasterPinError(false);
+      setMasterPinInput('');
+      playSound(1200, 0.15, 'sine');
+    } else {
+      setMasterPinError(true);
+      setMasterPinInput('');
+      playSound(200, 0.3, 'sawtooth');
+    }
+  };
+
+  // Keypad click for Master Lock
+  const handleMasterKeypadClick = (val: string) => {
+    playSound(800, 0.04);
+    if (val === 'clear') {
+      setMasterPinInput('');
+      setMasterPinError(false);
+    } else if (val === 'back') {
+      setMasterPinInput(prev => prev.slice(0, -1));
+      setMasterPinError(false);
+    } else {
+      if (masterPinInput.length < 4) {
+        const newVal = masterPinInput + val;
+        setMasterPinInput(newVal);
+        setMasterPinError(false);
+        if (newVal.length === 4) {
+          setTimeout(() => {
+            if (newVal === masterPin) {
+              setAppPinVerified(true);
+              sessionStorage.setItem('nazmul_master_auth_verified', 'true');
+              sessionStorage.setItem('nazmul_store_auth_verified', 'true');
+              setMasterPinError(false);
+              setMasterPinInput('');
+              playSound(1200, 0.15, 'sine');
+            } else {
+              setMasterPinError(true);
+              setMasterPinInput('');
+              playSound(200, 0.3, 'sawtooth');
+            }
+          }, 100);
+        }
+      }
+    }
+  };
+
+  // Change PIN handler
+  const handleChangeMasterPinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (oldMasterPinInput !== masterPin) {
+      alert("বর্তমান পিনটি সঠিক নয়!");
+      return;
+    }
+    if (newMasterPinInput.length !== 4 || isNaN(Number(newMasterPinInput))) {
+      alert("নতুন পিনটি অবশ্যই ৪ সংখ্যার হতে হবে!");
+      return;
+    }
+    setMasterPin(newMasterPinInput);
+    localStorage.setItem('nazmul_master_pin', newMasterPinInput);
+    localStorage.setItem('nazmul_store_pin', newMasterPinInput);
+    alert("মাস্টার পিন সফলভাবে পরিবর্তন করা হয়েছে!");
+    setShowMasterPinModal(false);
+    setOldMasterPinInput('');
+    setNewMasterPinInput('');
+  };
+
+  // Master Lock App handler
+  const handleLockApp = () => {
+    sessionStorage.removeItem('nazmul_master_auth_verified');
+    sessionStorage.removeItem('nazmul_store_auth_verified');
+    setAppPinVerified(false);
+    setMasterPinInput('');
+    setMasterPinError(false);
+    playSound(400, 0.1);
+  };
+
   // Handle manual ledger clear
   const handleResetLedger = () => {
     if (confirm("সতর্কতা! আপনি কি আজকের ডিজিটাল লেনদেনের খাতা সম্পূর্ণ মুছে ফেলতে চান?")) {
@@ -1816,10 +1936,96 @@ export default function App() {
     }
   };
 
+  // Master App PIN Lock View
+  if (!appPinVerified) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+        {/* Background decorative ambient glow */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col items-center text-center relative z-10">
+          <div className="p-4 bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 rounded-2xl mb-4 shadow-inner">
+            <Lock size={36} className="animate-bounce" />
+          </div>
+
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-1">
+            নাজমুল মাল্টি-স্টোর
+          </h2>
+          <p className="text-xs text-slate-400 font-medium mb-6">
+            টেলিকম ও জেনারেল স্টোরে প্রবেশের জন্য ৪-সংখ্যার মাস্টার পিন দিন (ডিফল্ট: ১২৩৪)
+          </p>
+
+          <form onSubmit={handleMasterPinSubmit} className="w-full">
+            <div className="relative mb-6">
+              <input 
+                type="password"
+                value={masterPinInput}
+                readOnly
+                placeholder="••••"
+                className={`w-full text-center text-3xl font-mono tracking-[1em] py-3.5 rounded-2xl border-2 transition-all ${
+                  masterPinError 
+                    ? 'border-rose-500 bg-rose-950/30 text-rose-400' 
+                    : 'border-indigo-500/40 bg-slate-950 text-white focus:border-indigo-500'
+                }`}
+              />
+            </div>
+
+            {/* Custom 3x4 keypad */}
+            <div className="grid grid-cols-3 gap-2.5 mb-4 font-mono">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleMasterKeypadClick(num)}
+                  className="py-3.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-indigo-600 text-xl font-bold text-slate-100 transition-all shadow-sm cursor-pointer border border-slate-700/60"
+                >
+                  {toBengaliNumber(num)}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => handleMasterKeypadClick('clear')}
+                className="py-3.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 text-sm font-bold text-rose-400 transition-all shadow-sm cursor-pointer border border-rose-800/40"
+              >
+                মুছুন
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMasterKeypadClick('0')}
+                className="py-3.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-indigo-600 text-xl font-bold text-slate-100 transition-all shadow-sm cursor-pointer border border-slate-700/60"
+              >
+                {toBengaliNumber('0')}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMasterKeypadClick('back')}
+                className="py-3.5 rounded-xl bg-amber-950/40 hover:bg-amber-900/50 text-sm font-bold text-amber-400 transition-all shadow-sm cursor-pointer border border-amber-800/40"
+              >
+                ←
+              </button>
+            </div>
+
+            {masterPinError && (
+              <p className="text-xs text-rose-400 font-bold animate-pulse mb-3">
+                ❌ ভুল পিন! পুনরায় সঠিক পিন দিয়ে চেষ্টা করুন।
+              </p>
+            )}
+
+            <div className="text-[11px] text-slate-500 mt-2 font-mono flex items-center justify-center gap-1">
+              <ShieldCheck size={14} className="text-emerald-500" />
+              <span>নিরাপদ লোকাল ও ক্লাউড ডাটাবেজ সিকিউরিটি</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-pink-100 antialiased text-slate-800 dark:bg-slate-950 dark:text-slate-100">
       
-      {/* Top Multi-Store Mode Switcher */}
+      {/* Top Multi-Store Mode Switcher & Master Security Bar */}
       <div className="bg-slate-950 text-white border-b border-slate-800 sticky top-0 z-50 shadow-md">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center py-2 sm:h-16 gap-3">
           <div className="flex items-center gap-2.5">
@@ -1830,19 +2036,42 @@ export default function App() {
             </div>
           </div>
           
-          <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800/80 shadow-inner w-full sm:w-auto">
-            <button
-              onClick={() => { setAppMode('telecom'); playSound(1000, 0.1); }}
-              className={`flex-1 sm:flex-initial px-5 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'telecom' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
-            >
-              <span>📱</span> টেলিকম রিচার্জ
-            </button>
-            <button
-              onClick={() => { setAppMode('general_store'); playSound(1200, 0.1); }}
-              className={`flex-1 sm:flex-initial px-5 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'general_store' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
-            >
-              <span>🏪</span> জেনারেল স্টোর
-            </button>
+          <div className="flex items-center gap-2 flex-wrap justify-center w-full sm:w-auto">
+            <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800/80 shadow-inner flex-1 sm:flex-initial">
+              <button
+                onClick={() => { setAppMode('telecom'); playSound(1000, 0.1); }}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'telecom' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+              >
+                <span>📱</span> টেলিকম রিচার্জ
+              </button>
+              <button
+                onClick={() => { setAppMode('general_store'); playSound(1200, 0.1); }}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${appMode === 'general_store' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+              >
+                <span>🏪</span> জেনারেল স্টোর
+              </button>
+            </div>
+
+            {/* Security Quick Controls */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => { setShowMasterPinModal(true); playSound(900, 0.05); }}
+                className="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                title="মাস্টার পিন পরিবর্তন করুন"
+              >
+                <Key size={14} className="text-amber-400" />
+                <span className="hidden md:inline">পিন বদলান</span>
+              </button>
+
+              <button
+                onClick={handleLockApp}
+                className="px-2.5 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 rounded-xl border border-rose-900/50 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                title="সাইট অবিলম্বে লক করুন"
+              >
+                <Lock size={14} className="text-rose-400" />
+                <span className="hidden md:inline">লক</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -4930,6 +5159,86 @@ export default function App() {
 
         </>
       )}
+
+      {/* Master PIN Change Modal */}
+      <AnimatePresence>
+        {showMasterPinModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl w-full max-w-sm"
+            >
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl">
+                    <Key size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">মাস্টার পিন পরিবর্তন</h3>
+                    <p className="text-[11px] text-slate-400">টেলিকম ও জেনারেল স্টোর উভয়ের পিন</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowMasterPinModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleChangeMasterPinSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    বর্তমান পিন নম্বর
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={oldMasterPinInput}
+                    onChange={(e) => setOldMasterPinInput(e.target.value)}
+                    placeholder="বর্তমান পিন"
+                    className="w-full text-center text-xl font-mono py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    নতুন ৪-সংখ্যার পিন নম্বর
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={newMasterPinInput}
+                    onChange={(e) => setNewMasterPinInput(e.target.value)}
+                    placeholder="নতুন পিন (যেমন: 5678)"
+                    className="w-full text-center text-xl font-mono py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowMasterPinModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    বাতিল
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer"
+                  >
+                    পিন সংরক্ষণ করুন
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

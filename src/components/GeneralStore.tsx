@@ -165,10 +165,10 @@ export default function GeneralStore({
 }: GeneralStoreProps) {
   // --- AUTH / PIN SYSTEM ---
   const [pinVerified, setPinVerified] = useState<boolean>(() => {
-    return sessionStorage.getItem('nazmul_store_auth_verified') === 'true';
+    return sessionStorage.getItem('nazmul_master_auth_verified') === 'true' || sessionStorage.getItem('nazmul_store_auth_verified') === 'true';
   });
   const [pin, setPin] = useState<string>(() => {
-    return localStorage.getItem('nazmul_store_pin') || '1234';
+    return localStorage.getItem('nazmul_master_pin') || localStorage.getItem('nazmul_store_pin') || '1234';
   });
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
@@ -253,6 +253,30 @@ export default function GeneralStore({
     }
     return [];
   });
+
+  // Storage listener for cross-tab sync in General Store
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'nazmul_store_products' && e.newValue) {
+        try { setProducts(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_store_sales' && e.newValue) {
+        try { setSales(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'nazmul_store_customers' && e.newValue) {
+        try { 
+          const parsed = JSON.parse(e.newValue);
+          setLocalCustomers(parsed);
+          if (saveStoreCustomers) saveStoreCustomers(parsed);
+        } catch (err) {}
+      } else if (e.key === 'nazmul_store_daily_ledgers' && e.newValue) {
+        try { setDailyLedgers(JSON.parse(e.newValue)); } catch (err) {}
+      } else if ((e.key === 'nazmul_master_pin' || e.key === 'nazmul_store_pin') && e.newValue) {
+        setPin(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [saveStoreCustomers]);
 
   // Current Date string YYYY-MM-DD
   const getTodayDateString = () => {
@@ -340,6 +364,7 @@ export default function GeneralStore({
             if (newVal === pin) {
               setPinVerified(true);
               setPinError(false);
+              sessionStorage.setItem('nazmul_master_auth_verified', 'true');
               sessionStorage.setItem('nazmul_store_auth_verified', 'true');
               playSound(1200, 0.1, 'sine');
             } else {
@@ -366,6 +391,7 @@ export default function GeneralStore({
       return;
     }
     setPin(newPinVal);
+    localStorage.setItem('nazmul_master_pin', newPinVal);
     localStorage.setItem('nazmul_store_pin', newPinVal);
     alert("পিন সফলভাবে পরিবর্তন করা হয়েছে!");
     playSound(1000, 0.15, 'sine');
@@ -376,6 +402,7 @@ export default function GeneralStore({
 
   const handleLockOut = () => {
     setPinVerified(false);
+    sessionStorage.removeItem('nazmul_master_auth_verified');
     sessionStorage.removeItem('nazmul_store_auth_verified');
     playSound(400, 0.1, 'sine');
   };
