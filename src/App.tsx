@@ -61,7 +61,10 @@ import {
   Lock,
   Unlock,
   Key,
-  ShieldCheck
+  ShieldCheck,
+  Timer,
+  RefreshCw,
+  CheckCheck
 } from 'lucide-react';
 import { 
   AccountKey, 
@@ -515,6 +518,17 @@ export default function App() {
   const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
   const [driveError, setDriveError] = useState<string | null>(null);
 
+  // Auto-backup configuration state (30m, 1h, 15m, 2h, off)
+  const [autoBackupInterval, setAutoBackupInterval] = useState<'15m' | '30m' | '1h' | '2h' | 'off'>(() => {
+    return (localStorage.getItem('nazmul_auto_backup_interval') as any) || '30m';
+  });
+  const [lastAutoBackupTime, setLastAutoBackupTime] = useState<number | null>(() => {
+    const saved = localStorage.getItem('nazmul_last_auto_backup_time');
+    return saved ? parseInt(saved, 10) : null;
+  });
+  const [autoBackupCountdown, setAutoBackupCountdown] = useState<string>('');
+  const [autoBackupToast, setAutoBackupToast] = useState<{ message: string; timestamp: number } | null>(null);
+
   // Load backups list helper
   const loadDriveBackupsList = async () => {
     setLoadingBackups(true);
@@ -530,6 +544,116 @@ export default function App() {
       setLoadingBackups(false);
     }
   };
+
+  // Change Auto Backup Interval Handler
+  const handleSetAutoBackupInterval = (val: '15m' | '30m' | '1h' | '2h' | 'off') => {
+    setAutoBackupInterval(val);
+    localStorage.setItem('nazmul_auto_backup_interval', val);
+    playSound(1100, 0.08);
+  };
+
+  // Background Periodic Auto-Backup Engine
+  useEffect(() => {
+    if (autoBackupInterval === 'off' || !googleUser) {
+      setAutoBackupCountdown('');
+      return;
+    }
+
+    const getIntervalMs = (interval: string) => {
+      switch (interval) {
+        case '15m': return 15 * 60 * 1000;
+        case '30m': return 30 * 60 * 1000;
+        case '1h': return 60 * 60 * 1000;
+        case '2h': return 120 * 60 * 1000;
+        default: return 30 * 60 * 1000;
+      }
+    };
+
+    const intervalMs = getIntervalMs(autoBackupInterval);
+
+    const checkAndRunAutoBackup = async () => {
+      const savedLast = localStorage.getItem('nazmul_last_auto_backup_time');
+      const lastTime = savedLast ? parseInt(savedLast, 10) : 0;
+      const now = Date.now();
+
+      // If no last backup or elapsed time is greater than interval
+      if (!lastTime || now - lastTime >= intervalMs) {
+        try {
+          const storeProducts = JSON.parse(localStorage.getItem('nazmul_store_products') || '[]');
+          const storeSales = JSON.parse(localStorage.getItem('nazmul_store_sales') || '[]');
+          const storeDailyLedgers = JSON.parse(localStorage.getItem('nazmul_store_daily_ledgers') || '[]');
+          const storePin = localStorage.getItem('nazmul_store_pin') || '';
+
+          const backupData = {
+            isFullBackup: true,
+            isAutoBackup: true,
+            balances,
+            transactions,
+            purchases,
+            cardStock,
+            cardUnits,
+            telecomCustomers,
+            commissionOffset,
+            volumeOffset,
+            generalStore: {
+              products: storeProducts,
+              customers: storeCustomers,
+              sales: storeSales,
+              daily_ledgers: storeDailyLedgers,
+              pin: storePin
+            },
+            timestamp: now
+          };
+
+          await uploadBackupToDrive(backupData);
+          setLastAutoBackupTime(now);
+          localStorage.setItem('nazmul_last_auto_backup_time', String(now));
+
+          const timeFormatted = new Date(now).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+          setAutoBackupToast({
+            message: `গুগল ড্রাইভে স্বয়ংক্রিয় ব্যাকআপ সফল হয়েছে (${toBengaliNumber(timeFormatted)})`,
+            timestamp: now
+          });
+
+          // Also reload drive backups list if currently on backup tab
+          if (dashboardTab === 'backup') {
+            loadDriveBackupsList();
+          }
+
+          setTimeout(() => {
+            setAutoBackupToast(null);
+          }, 6000);
+        } catch (err) {
+          console.error("Silent auto backup error:", err);
+        }
+      }
+
+      // Update countdown text
+      const currentLast = parseInt(localStorage.getItem('nazmul_last_auto_backup_time') || String(now), 10);
+      const remainingMs = Math.max(0, (currentLast + intervalMs) - Date.now());
+      const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+      if (remainingMinutes <= 1) {
+        setAutoBackupCountdown('শীঘ্রই ব্যাকআপ হচ্ছে...');
+      } else {
+        setAutoBackupCountdown(`${toBengaliNumber(remainingMinutes)} মিনিট পর`);
+      }
+    };
+
+    // Run initial check after 5 seconds
+    const initialTimer = setTimeout(() => {
+      checkAndRunAutoBackup();
+    }, 5000);
+
+    // Periodic ticker every 20 seconds
+    const intervalTimer = setInterval(() => {
+      checkAndRunAutoBackup();
+    }, 20000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalTimer);
+    };
+  }, [autoBackupInterval, googleUser, balances, transactions, purchases, cardStock, cardUnits, telecomCustomers, commissionOffset, volumeOffset, storeCustomers, dashboardTab]);
 
   // Auth state listener on load
   useEffect(() => {
@@ -3345,6 +3469,104 @@ export default function App() {
                 </div>
               )}
 
+              {/* AUTOMATIC CLOUD BACKUP SCHEDULER PANEL */}
+              <div className="bg-linear-to-r from-indigo-900/10 via-emerald-900/5 to-slate-900/10 p-4 sm:p-5 rounded-2xl border border-indigo-200 dark:border-indigo-800/50 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
+                      <Timer size={20} className="animate-spin-slow" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        গুগল ড্রাইভে স্বয়ংক্রিয় (অটো) ব্যাকআপ শিডিউল
+                        {autoBackupInterval !== 'off' && googleUser && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                            সক্রিয়
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        টেলিকম রিচার্জ ও জেনারেল স্টোরের সম্পূর্ণ হিসাব ৩০ মিনিট বা ১ ঘন্টা পর পর নিরাপদে ড্রাইভ ক্লাউডে সংরক্ষণ হবে।
+                      </p>
+                    </div>
+                  </div>
+
+                  {googleUser && (
+                    <button
+                      onClick={handleDriveBackupUpload}
+                      disabled={driveBackingUp}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                    >
+                      <RefreshCw size={13} className={driveBackingUp ? "animate-spin" : ""} />
+                      {driveBackingUp ? "আপলোড হচ্ছে..." : "এখনই ব্যাকআপ নিন"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Interval Options Selectors */}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                    ⏱️ ব্যাকআপের সময় ব্যবধান নির্বাচন করুন:
+                  </span>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { id: '15m', label: '১৫ মিনিট পর পর', tag: 'দ্রুত' },
+                      { id: '30m', label: '৩০ মিনিট পর পর', tag: 'সেরা / প্রস্তাবিত' },
+                      { id: '1h', label: '১ ঘন্টা পর পর', tag: 'স্ট্যান্ডার্ড' },
+                      { id: '2h', label: '২ ঘন্টা পর পর', tag: 'ধীর' },
+                      { id: 'off', label: 'অটো ব্যাকআপ বন্ধ', tag: 'ম্যানুয়াল' }
+                    ].map((opt) => {
+                      const isSelected = autoBackupInterval === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => handleSetAutoBackupInterval(opt.id as any)}
+                          className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-400/30'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-xs font-black">{opt.label}</span>
+                            {isSelected && <CheckCheck size={14} className="shrink-0" />}
+                          </div>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md inline-block w-fit ${
+                            isSelected 
+                              ? 'bg-white/20 text-white' 
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          }`}>
+                            {opt.tag}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Status bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-600 dark:text-slate-400 bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800 font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">সর্বশেষ ব্যাকআপ:</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 font-bold">
+                      {lastAutoBackupTime ? formatDateTimeBangla(lastAutoBackupTime) : 'এখনো সম্পন্ন হয়নি'}
+                    </span>
+                  </div>
+
+                  {autoBackupInterval !== 'off' && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-sans font-bold text-slate-700 dark:text-slate-300">পরবর্তী অটো-ব্যাকআপ:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold font-sans">
+                        {googleUser ? (autoBackupCountdown || 'চলমান...') : 'গুগল ড্রাইভ কানেক্ট করুন'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Download row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
@@ -5237,6 +5459,32 @@ export default function App() {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Auto-Backup Toast Notification */}
+      <AnimatePresence>
+        {autoBackupToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-5 right-5 z-50 bg-slate-900/95 text-white border border-emerald-500/40 shadow-2xl px-4 py-3 rounded-2xl flex items-center gap-3 backdrop-blur-md max-w-sm"
+          >
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0">
+              <CheckCircle2 size={18} />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-bold text-slate-100">{autoBackupToast.message}</p>
+              <p className="text-[10px] text-slate-400">টেলিকম ও জেনারেল স্টোরের ডাটা ক্লাউডে সুরক্ষিত</p>
+            </div>
+            <button
+              onClick={() => setAutoBackupToast(null)}
+              className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer ml-1 shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
