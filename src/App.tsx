@@ -1494,7 +1494,17 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Login failed:", err);
-      setDriveError("গুগল ড্রাইভ অথরাইজেশন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
+      const code = err?.code || '';
+      const currentHost = window.location.hostname;
+      if (code === 'auth/unauthorized-domain') {
+        setDriveError(`ডোমেন অনুমোদিত নয়: ফায়ারবেস কনসোলে "${currentHost}" ডোমেনটি Authorized Domains-এ যুক্ত করতে হবে।`);
+      } else if (code === 'auth/popup-blocked') {
+        setDriveError("ব্রাউজারে পপ-আপ ব্লক করা রয়েছে। দয়া করে ব্রাউজার সেটিংসে Pop-ups allow করুন।");
+      } else if (code === 'auth/popup-closed-by-user') {
+        setDriveError("লগইন উইন্ডো বন্ধ করা হয়েছে। পুনরায় চেষ্টা করুন।");
+      } else {
+        setDriveError(`গুগল অথরাইজেশন ব্যর্থ হয়েছে (${err?.message || 'সমস্যা হয়েছে'})।`);
+      }
     }
   };
 
