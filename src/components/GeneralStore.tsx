@@ -32,7 +32,13 @@ import {
   Check,
   Phone,
   Mail,
-  Layers
+  Layers,
+  Clock,
+  Flame,
+  ShieldAlert,
+  Filter,
+  PhoneCall,
+  X
 } from 'lucide-react';
 import { 
   StoreProduct, 
@@ -43,7 +49,9 @@ import {
   StorePurchase, 
   StoreDailyLedger,
   TelecomCustomer,
-  TelecomCustomerTxn
+  TelecomCustomerTxn,
+  KhelapiInfo,
+  getCustomerKhelapiInfo
 } from '../types';
 
 interface GeneralStoreProps {
@@ -197,18 +205,7 @@ export default function GeneralStore({
         }
       } catch (e) { /* ignore */ }
     }
-    // Seeds
-    return [
-      { id: 'p1', name: 'জিরাস চিপস (ছোট)', buyPrice: 4.38, buy: 4.38, sellPrice: 5.00, sell: 5.00, stock: 27 },
-      { id: 'p2', name: 'জিরাস চিপস (বড়)', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 21 },
-      { id: 'p3', name: 'বোম্বে চিপস', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 7 },
-      { id: 'p4', name: 'রিং চিপস', buyPrice: 8.00, buy: 8.00, sellPrice: 10.00, sell: 10.00, stock: 37 },
-      { id: 'p5', name: 'মাইটি চিপস', buyPrice: 8.25, buy: 8.25, sellPrice: 10.00, sell: 10.00, stock: 0 },
-      { id: 'p6', name: 'প্রান ডাউল ভাজা', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 19 },
-      { id: 'p7', name: 'আরকু চানাচুর', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 15 },
-      { id: 'p8', name: 'পাইন এ্যাপেল বিস্কুট', buyPrice: 4.00, buy: 4.00, sellPrice: 5.00, sell: 5.00, stock: 10 },
-      { id: 'p9', name: 'মিল্ক প্লাস বিস্কুট', buyPrice: 8.50, buy: 8.50, sellPrice: 10.00, sell: 10.00, stock: 10 }
-    ];
+    return [];
   });
 
   // Customers (Credit ledger)
@@ -217,19 +214,7 @@ export default function GeneralStore({
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
-    // Seeds
-    return [
-      { id: 'c1', name: 'রহিম মিঞা (ফ্লেক্সিলোড)', phone: '01711223344', due: 1229, transactions: [{ id: 't1', type: 'sale_due', amount: 1229, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c2', name: 'করিম হোসেন (কার্ড)', phone: '01815556677', due: 311, transactions: [{ id: 't2', type: 'sale_due', amount: 311, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c3', name: 'সজীব আহমেদ (বিকাশ)', phone: '01912345678', due: 50, transactions: [{ id: 't3', type: 'sale_due', amount: 50, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c4', name: 'সফুর (গোস্ত)', phone: '', due: 360, transactions: [{ id: 't4', type: 'sale_due', amount: 360, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c5', name: 'আলিম (গোস্ত)', phone: '', due: 560, transactions: [{ id: 't5', type: 'sale_due', amount: 560, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c6', name: 'দুলাল (ফার্নিচার)', phone: '', due: 85, transactions: [{ id: 't6', type: 'sale_due', amount: 85, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c7', name: 'সাগর (ফার্নিচার)', phone: '', due: 250, transactions: [{ id: 't7', type: 'sale_due', amount: 250, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c8', name: 'সায়েমের দুলাভাই', phone: '', due: 190, transactions: [{ id: 't8', type: 'sale_due', amount: 190, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c9', name: 'কায়দা আজম', phone: '', due: 12, transactions: [{ id: 't9', type: 'sale_due', amount: 12, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] },
-      { id: 'c10', name: 'আরিফ (বাস)', phone: '', due: 120, transactions: [{ id: 't10', type: 'sale_due', amount: 120, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] }
-    ];
+    return [];
   });
 
   const customers = propsStoreCustomers || localCustomers;
@@ -241,6 +226,15 @@ export default function GeneralStore({
       localStorage.setItem('nazmul_store_customers', JSON.stringify(data));
     }
   };
+
+  // 15-day Overdue Defaulters List for General Store
+  const [showStore15DayModal, setShowStore15DayModal] = useState<boolean>(false);
+  const store15DayOverdueList = useMemo(() => {
+    return customers
+      .map(c => ({ customer: c, kInfo: getCustomerKhelapiInfo(c) }))
+      .filter(item => item.customer.due > 0 && item.kInfo.category === '15_days')
+      .sort((a, b) => b.kInfo.daysOverdue - a.kInfo.daysOverdue);
+  }, [customers]);
 
   // Sales
   const [sales, setSales] = useState<StoreSale[]>(() => {
@@ -674,6 +668,8 @@ export default function GeneralStore({
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
   const [newCustInitialDue, setNewCustInitialDue] = useState<string>('0');
+  const [creditLedgerTab, setCreditLedgerTab] = useState<'all' | 'khelapi'>('all');
+  const [khelapiFilterCat, setKhelapiFilterCat] = useState<'all' | '7_days' | '15_days' | '30_days'>('all');
 
   const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<StoreCustomer | null>(null);
   const [tempReminderPhone, setTempReminderPhone] = useState<string>('');
@@ -1771,11 +1767,29 @@ export default function GeneralStore({
 
                 {/* 3. Credit Ledger */}
                 <button
-                  onClick={() => { setView('credit_ledger'); playSound(900, 0.05); }}
-                  className="p-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl shadow transition-all flex flex-col items-center justify-center gap-2 text-center"
+                  onClick={() => {
+                    setView('credit_ledger');
+                    if (store15DayOverdueList.length > 0) {
+                      setShowStore15DayModal(true);
+                    }
+                    playSound(900, 0.05);
+                  }}
+                  className="p-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl shadow transition-all flex flex-col items-center justify-center gap-2 text-center relative overflow-hidden"
                 >
+                  {store15DayOverdueList.length > 0 && (
+                    <span className="absolute top-2 right-2 flex items-center gap-1 bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow">
+                      <AlertTriangle size={10} /> {toBnNum(store15DayOverdueList.length)}
+                    </span>
+                  )}
                   <Users size={24} />
-                  <span className="text-xs font-bold">বাকি খাতা (Ledger)</span>
+                  <span className="text-xs font-bold flex items-center gap-1">
+                    বাকি খাতা (Ledger)
+                    {store15DayOverdueList.length > 0 && (
+                      <span className="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-md">
+                        ১৫ দিন
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[10px] opacity-80 font-mono font-medium">Credit Ledger</span>
                 </button>
 
@@ -2298,134 +2312,396 @@ export default function GeneralStore({
         )}
 
         {/* --- CREDIT LEDGER VIEW --- */}
-        {view === 'credit_ledger' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-            
-            {/* Left lists (2 cols on desktop) */}
-            <div className="lg:col-span-2 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-                <button
-                  onClick={() => { setView('dashboard'); setSelectedCustomerDetails(null); }}
-                  className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                >
-                  <ChevronLeft size={16} /> ড্যাশবোর্ডে ফিরুন
-                </button>
-                <h3 className="text-base font-black text-slate-950 dark:text-white">বকেয়া খাতা (Credit Ledger)</h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {customers.some(c => c.due > 0) && (
-                    <button
-                      onClick={() => {
-                        const dueCustomers = customers.filter(c => c.due > 0);
-                        setSelectedBulkCustomerIds(dueCustomers.map(c => c.id));
-                        setCurrentBulkIndex(0);
-                        setShowBulkReminderModal(true);
-                        playSound(1000, 0.08);
-                      }}
-                      className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
-                    >
-                      <MessageCircle size={14} className="animate-bounce" /> সবাইকে নোটিশ পাঠান
-                    </button>
-                  )}
+        {view === 'credit_ledger' && (() => {
+          // Defaulters calculation for General Store
+          const storeWithKhelapi = customers.map(c => ({
+            customer: c,
+            kInfo: getCustomerKhelapiInfo(c)
+          }));
+
+          const storeDefaulters = storeWithKhelapi
+            .filter(item => item.customer.due > 0 && item.kInfo.daysOverdue >= 7)
+            .sort((a, b) => b.kInfo.daysOverdue - a.kInfo.daysOverdue); // যার বাকি যতদিন বেশি তার নাম উপরে থাকবে
+
+          const storeKhelapi7to14 = storeDefaulters.filter(d => d.kInfo.category === '7_days');
+          const storeKhelapi15to29 = storeDefaulters.filter(d => d.kInfo.category === '15_days');
+          const storeKhelapi30plus = storeDefaulters.filter(d => d.kInfo.category === '30_days');
+          const totalStoreKhelapiDue = storeDefaulters.reduce((sum, d) => sum + d.customer.due, 0);
+
+          const filteredStoreDefaulters = storeDefaulters.filter(d => {
+            if (khelapiFilterCat === '7_days') return d.kInfo.category === '7_days';
+            if (khelapiFilterCat === '15_days') return d.kInfo.category === '15_days';
+            if (khelapiFilterCat === '30_days') return d.kInfo.category === '30_days';
+            return true;
+          }).filter(d => {
+            if (!custSearch.trim()) return true;
+            const q = custSearch.toLowerCase();
+            return d.customer.name.toLowerCase().includes(q) || (d.customer.phone && d.customer.phone.includes(q));
+          });
+
+          const filteredAllCustomers = customers.filter(c => {
+            if (!custSearch.trim()) return true;
+            const q = custSearch.toLowerCase();
+            return c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q));
+          });
+
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+              
+              {/* Left lists (2 cols on desktop) */}
+              <div className="lg:col-span-2 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <button
-                    onClick={() => setShowAddCustomerModal(true)}
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md cursor-pointer transition-all"
+                    onClick={() => { setView('dashboard'); setSelectedCustomerDetails(null); }}
+                    className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
                   >
-                    <UserPlus size={14} /> নতুন কাস্টমার
+                    <ChevronLeft size={16} /> ড্যাশবোর্ডে ফিরুন
                   </button>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-950 dark:text-white">বকেয়া খাতা ও খেলাপি কাস্টমার</h3>
+                    {storeDefaulters.length > 0 && (
+                      <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 text-[10px] font-black rounded-full border border-rose-200 dark:border-rose-900/40">
+                        🚨 {toBnNum(storeDefaulters.length)} জন খেলাপি
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {customers.some(c => c.due > 0) && (
+                      <button
+                        onClick={() => {
+                          const dueCustomers = customers.filter(c => c.due > 0);
+                          setSelectedBulkCustomerIds(dueCustomers.map(c => c.id));
+                          setCurrentBulkIndex(0);
+                          setShowBulkReminderModal(true);
+                          playSound(1000, 0.08);
+                        }}
+                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                      >
+                        <MessageCircle size={14} className="animate-bounce" /> সবাইকে নোটিশ পাঠান
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md cursor-pointer transition-all"
+                    >
+                      <UserPlus size={14} /> নতুন কাস্টমার
+                    </button>
+                  </div>
+                </div>
+
+                {/* 15-Day Overdue Defaulters Alert Banner */}
+                {storeKhelapi15to29.length > 0 && (
+                  <div className="p-3.5 bg-gradient-to-r from-orange-50 to-rose-50 dark:from-orange-950/20 dark:to-rose-950/20 border border-orange-200 dark:border-orange-900/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 rounded-xl shrink-0">
+                        <AlertTriangle size={20} className="animate-bounce" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-orange-950 dark:text-orange-200 flex items-center gap-2">
+                          <span>🚨 ১৫ দিনের খেলাপি ক্যাটাগরি সতর্কতা!</span>
+                          <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-black rounded-md">
+                            {toBnNum(storeKhelapi15to29.length)} জন গ্রাহক
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-orange-800 dark:text-orange-300 font-medium mt-0.5">
+                          বিগত ১৫-২৯ দিন যাবত কোনো বকেয়া পরিশোধ করেননি (মোট বকেয়া: ৳{toBnNum(storeKhelapi15to29.reduce((acc, d) => acc + d.customer.due, 0).toFixed(2))})। দ্রুত তাগাদা দিন!
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowStore15DayModal(true);
+                          playSound(1000, 0.08);
+                        }}
+                        className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Flame size={13} /> পপআপ সামারি দেখুন
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub Tabs: All Customers vs Khelapi Defaulters */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => { setCreditLedgerTab('all'); playSound(950, 0.05); }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                        creditLedgerTab === 'all'
+                          ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-900/40'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <Users size={13} />
+                      সকল গ্রাহক ({toBnNum(customers.length)})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setCreditLedgerTab('khelapi'); playSound(1050, 0.08); }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                        creditLedgerTab === 'khelapi'
+                          ? 'bg-rose-600 text-white shadow-md'
+                          : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                      }`}
+                    >
+                      <AlertTriangle size={13} className={storeDefaulters.length > 0 ? "animate-bounce" : ""} />
+                      খেলাপি কাস্টমার ({toBnNum(storeDefaulters.length)})
+                    </button>
+                  </div>
+
+                  {/* Search */}
+                  <div className="relative min-w-[200px]">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Search size={14} />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="নাম বা ফোন দিয়ে খুঁজুন..."
+                      value={custSearch}
+                      onChange={e => setCustSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Khelapi Category Filter Pills (When Khelapi Tab Active) */}
+                {creditLedgerTab === 'khelapi' && (
+                  <div className="p-3 bg-rose-50/50 dark:bg-rose-950/20 rounded-2xl border border-rose-100 dark:border-rose-950/40 space-y-2.5">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-rose-900 dark:text-rose-300">
+                      <span className="flex items-center gap-1">
+                        <Flame size={12} className="text-rose-600" /> ক্যাটাগরি অনুযায়ী ফিল্টার করুন:
+                      </span>
+                      <span className="text-slate-400">
+                        মোট খেলাপি বকেয়া: <strong>৳{toBnNum(totalStoreKhelapiDue)}</strong>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiFilterCat('all'); playSound(900, 0.04); }}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiFilterCat === 'all'
+                            ? 'bg-rose-600 text-white border-rose-600'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-rose-200 dark:border-rose-900/40 hover:bg-rose-50'
+                        }`}
+                      >
+                        <div className="text-[9px] font-bold opacity-90">সব খেলাপি (৭+ দিন)</div>
+                        <div className="text-xs font-black font-mono mt-0.5">{toBnNum(storeDefaulters.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiFilterCat('7_days'); playSound(900, 0.04); }}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiFilterCat === '7_days'
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-900/40 hover:bg-amber-50'
+                        }`}
+                      >
+                        <div className="text-[9px] font-bold opacity-90">⚠️ ৭ দিন (৭-১৪ দিন)</div>
+                        <div className="text-xs font-black font-mono mt-0.5">{toBnNum(storeKhelapi7to14.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiFilterCat('15_days'); playSound(900, 0.04); }}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiFilterCat === '15_days'
+                            ? 'bg-orange-600 text-white border-orange-600'
+                            : 'bg-white dark:bg-slate-800 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-900/40 hover:bg-orange-50'
+                        }`}
+                      >
+                        <div className="text-[9px] font-bold opacity-90">🚨 ১৫ দিন (১৫-২৯ দিন)</div>
+                        <div className="text-xs font-black font-mono mt-0.5">{toBnNum(storeKhelapi15to29.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiFilterCat('30_days'); playSound(900, 0.04); }}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiFilterCat === '30_days'
+                            ? 'bg-red-700 text-white border-red-700'
+                            : 'bg-white dark:bg-slate-800 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/40 hover:bg-red-50'
+                        }`}
+                      >
+                        <div className="text-[9px] font-bold opacity-90">⛔ ৩০ দিন (৩০+ দিন)</div>
+                        <div className="text-xs font-black font-mono mt-0.5">{toBnNum(storeKhelapi30plus.length)} জন</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Total Credit Summary Card (When All Customers Tab) */}
+                {creditLedgerTab === 'all' && (
+                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-950/40 rounded-2xl flex justify-between items-center text-rose-800 dark:text-rose-400 font-mono">
+                    <span className="text-xs font-bold font-sans">সর্বমোট বকেয়া পাওনা (Total Due Receivable)</span>
+                    <strong className="text-lg font-black">৳{toBnNum(customers.reduce((acc, curr) => acc + curr.due, 0).toLocaleString('en-US'))}</strong>
+                  </div>
+                )}
+
+                {/* Customer List Container */}
+                <div className="space-y-2 overflow-y-auto max-h-[380px] pr-1">
+                  {creditLedgerTab === 'khelapi' ? (
+                    filteredStoreDefaulters.length === 0 ? (
+                      <div className="text-center py-10 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs space-y-2">
+                        <CheckCircle size={24} className="mx-auto text-emerald-500" />
+                        <p className="font-bold text-slate-600 dark:text-slate-300">এই ক্যাটাগরিতে কোনো খেলাপি গ্রাহক নেই!</p>
+                        <p className="text-[10px]">সকল গ্রাহকের বকেয়া যথাসময়ে পরিশোধ হচ্ছে।</p>
+                      </div>
+                    ) : (
+                      filteredStoreDefaulters.map(({ customer: c, kInfo }) => {
+                        const isSelected = selectedCustomerDetails?.id === c.id;
+                        return (
+                          <div 
+                            key={c.id} 
+                            onClick={() => { setSelectedCustomerDetails(c); playSound(950, 0.05); }}
+                            className={`p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all border ${
+                              isSelected 
+                                ? 'bg-rose-50/80 border-rose-300 dark:bg-rose-950/40 dark:border-rose-900 shadow-xs' 
+                                : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 border-slate-100 dark:border-slate-800'
+                            }`}
+                          >
+                            {/* Left Info */}
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <strong className="text-sm font-bold text-slate-900 dark:text-slate-100">{c.name}</strong>
+                                  <span className={`px-2 py-0.5 text-[9px] font-black rounded-md border ${kInfo.categoryBadgeClass}`}>
+                                    {kInfo.categoryLabel}
+                                  </span>
+                                </div>
+                                {c.phone && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{c.phone}</p>}
+                                <span className="text-[9px] text-rose-500 font-bold block mt-0.5">
+                                  🔥 {toBnNum(kInfo.daysOverdue)} দিন অপরিশোধিত
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Right Info & Actions */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-800/60">
+                              <div className="text-left sm:text-right font-mono shrink-0">
+                                <span className="text-[9px] text-slate-400 font-sans block">বাকি পাওনা</span>
+                                <strong className="text-sm font-black text-rose-600 dark:text-rose-400">৳{toBnNum(c.due)}</strong>
+                              </div>
+                              
+                              <div className="flex items-center gap-1.5">
+                                {c.phone && (
+                                  <a
+                                    href={`https://api.whatsapp.com/send?phone=${
+                                      ((c.phone.replace(/\D/g, '').startsWith('0') ? '88' : '') + c.phone.replace(/\D/g, ''))
+                                    }&text=${encodeURIComponent(
+                                      `প্রিয় ${c.name},\nনাজমুল জেনারেল স্টোরে আপনার বকেয়া বাকির পরিমাণ ৳${toBnNum(c.due)} টাকা।\nআপনি বিগত ${toBnNum(kInfo.daysOverdue)} দিন যাবত কোনো বকেয়া পরিশোধ করেননি (${kInfo.categoryLabel})।\nঅনুগ্রহ করে অতিসত্বর বকেয়া টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40"
+                                    title="WhatsApp তাগাদা নোটিশ পাঠান"
+                                  >
+                                    <MessageCircle size={11} /> তাগাদা
+                                  </a>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedCustomerDetails(c); playSound(950, 0.05); }}
+                                  className="px-2.5 py-1 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-950/80 transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye size={12} /> ডিটেইলস
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )
+                  ) : (
+                    filteredAllCustomers.map(c => {
+                      const kInfo = getCustomerKhelapiInfo(c);
+                      return (
+                        <div 
+                          key={c.id} 
+                          onClick={() => { setSelectedCustomerDetails(c); playSound(950, 0.05); }}
+                          className={`p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all border ${selectedCustomerDetails?.id === c.id ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 border-slate-100 dark:border-slate-800'}`}
+                        >
+                          {/* Left Info */}
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <strong className="text-sm font-bold text-slate-900 dark:text-slate-100">{c.name}</strong>
+                                {c.due > 0 && kInfo.daysOverdue >= 7 && (
+                                  <span className={`px-1.5 py-0.2 text-[8px] font-black rounded border ${kInfo.categoryBadgeClass}`}>
+                                    {kInfo.categoryLabel}
+                                  </span>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleEditCustomerName(c); }}
+                                  className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors cursor-pointer"
+                                  title="নাম সংশোধন করুন"
+                                >
+                                  <Edit size={13} />
+                                </button>
+                              </div>
+                              {c.phone && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{c.phone}</p>}
+                            </div>
+                          </div>
+
+                          {/* Right Info & Actions */}
+                          <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-800/60">
+                            <div className="text-left sm:text-right font-mono shrink-0">
+                              <span className="text-[9px] text-slate-400 font-sans block">বাকি পাওনা</span>
+                              <strong className={`text-sm font-black ${c.due > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+                                ৳{toBnNum(c.due)}
+                              </strong>
+                              {c.due > 0 && kInfo.daysOverdue >= 7 && (
+                                <span className="text-[8px] text-rose-500 font-bold block">
+                                  🔥 {toBnNum(kInfo.daysOverdue)} দিন বাকি
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5">
+                              {isLinkedToTelecom(c) ? (
+                                <span className="p-1.5 text-emerald-600 flex items-center gap-0.5" title="যৌথ খাতায় সংযুক্ত">
+                                  <CheckCircle size={14} className="text-emerald-600" />
+                                  <span className="text-[10px] font-bold text-emerald-600 hidden md:inline">সংযুক্ত</span>
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleSyncStoreCustomerToTelecom(c); }}
+                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 font-sans font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-amber-200 dark:border-amber-900/40"
+                                  title="যৌথ খাতায় যুক্ত করুন (টেলিকম খাতাতেও এড হবে)"
+                                >
+                                  <UserPlus size={11} /> যৌথ খাতায় যুক্ত
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedCustomerDetails(c); playSound(950, 0.05); }}
+                                className="px-3 py-1.5 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-950/80 transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye size={12} /> ডিটেইলস
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteCustomer(c.id); }}
+                                className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl transition-all cursor-pointer"
+                                title="কাস্টমার ডিলিট করুন"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* Search */}
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                  <Search size={15} />
-                </span>
-                <input
-                  type="text"
-                  placeholder="কাস্টমারের নাম বা ফোন লিখে খুঁজুন..."
-                  value={custSearch}
-                  onChange={e => setCustSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs"
-                />
-              </div>
-
-              {/* Total Credit Summary Card */}
-              <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-950/40 rounded-2xl flex justify-between items-center text-rose-800 dark:text-rose-400 font-mono">
-                <span className="text-xs font-bold font-sans">সর্বমোট বকেয়া পাওনা (Total Due Receivable)</span>
-                <strong className="text-lg font-black">৳{toBnNum(customers.reduce((acc, curr) => acc + curr.due, 0).toLocaleString('en-US'))}</strong>
-              </div>
-
-              {/* Customer Due List */}
-              <div className="space-y-2 overflow-y-auto max-h-[350px]">
-                {customers
-                  .filter(c => c.name.toLowerCase().includes(custSearch.toLowerCase()) || (c.phone && c.phone.includes(custSearch)))
-                  .map(c => (
-                    <div 
-                      key={c.id} 
-                      onClick={() => { setSelectedCustomerDetails(c); playSound(950, 0.05); }}
-                      className={`p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all border ${selectedCustomerDetails?.id === c.id ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 border-slate-100 dark:border-slate-800'}`}
-                    >
-                      {/* Left Info */}
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <strong className="text-sm font-bold text-slate-900 dark:text-slate-100">{c.name}</strong>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEditCustomerName(c); }}
-                              className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors cursor-pointer"
-                              title="নাম সংশোধন করুন"
-                            >
-                              <Edit size={13} />
-                            </button>
-                          </div>
-                          {c.phone && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{c.phone}</p>}
-                        </div>
-                      </div>
-
-                      {/* Right Info & Actions */}
-                      <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-800/60">
-                        <div className="text-left sm:text-right font-mono shrink-0">
-                          <span className="text-[9px] text-slate-400 font-sans block">বাকি পাওনা</span>
-                          <strong className="text-sm font-black text-rose-600 dark:text-rose-400">৳{toBnNum(c.due)}</strong>
-                        </div>
-                        
-                        <div className="flex items-center gap-1.5">
-                          {isLinkedToTelecom(c) ? (
-                            <span className="p-1.5 text-emerald-600 flex items-center gap-0.5" title="যৌথ খাতায় সংযুক্ত">
-                              <CheckCircle size={14} className="text-emerald-600" />
-                              <span className="text-[10px] font-bold text-emerald-600 hidden md:inline">সংযুক্ত</span>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleSyncStoreCustomerToTelecom(c); }}
-                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 font-sans font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-amber-200 dark:border-amber-900/40"
-                              title="যৌথ খাতায় যুক্ত করুন (টেলিকম খাতাতেও এড হবে)"
-                            >
-                              <UserPlus size={11} /> যৌথ খাতায় যুক্ত
-                            </button>
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedCustomerDetails(c); playSound(950, 0.05); }}
-                            className="px-3 py-1.5 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-950/80 transition-all flex items-center gap-1 cursor-pointer"
-                          >
-                            <Eye size={12} /> ডিটেইলস
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteCustomer(c.id); }}
-                            className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl transition-all cursor-pointer"
-                            title="কাস্টমার ডিলিট করুন"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* Right details sidebar (1 col on desktop) */}
-            <div className="bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
+              {/* Right details sidebar (1 col on desktop) */}
+              <div className="bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-4">
               {selectedCustomerDetails ? (
                 <div className="space-y-4">
                   <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -2447,6 +2723,30 @@ export default function GeneralStore({
                     <span className="text-[11px] text-slate-400 font-sans">মোট বকেয়া ব্যালেন্স</span>
                     <strong className="block text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">৳{toBnNum(selectedCustomerDetails.due)}</strong>
                   </div>
+
+                  {/* Overdue Alert Banner if Customer is Defaulter */}
+                  {(() => {
+                    const kInfo = getCustomerKhelapiInfo(selectedCustomerDetails);
+                    if (selectedCustomerDetails.due > 0 && kInfo.daysOverdue >= 7) {
+                      return (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-2xl space-y-2 text-left">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle size={16} className="text-rose-600 animate-pulse shrink-0" />
+                            <div className="text-xs font-black text-rose-900 dark:text-rose-200 flex items-center gap-1.5 flex-wrap">
+                              <span>খেলাপি গ্রাহক</span>
+                              <span className={`px-2 py-0.5 text-[9px] font-black rounded-md border ${kInfo.categoryBadgeClass}`}>
+                                {kInfo.categoryLabel}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-rose-700 dark:text-rose-300 font-medium">
+                            বিগত <strong>{toBnNum(kInfo.daysOverdue)} দিন</strong> যাবত কোনো বকেয়া জমা প্রদান করেননি।
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* Joint Ledger Connection Status */}
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
@@ -2637,7 +2937,7 @@ export default function GeneralStore({
             </div>
 
           </div>
-        )}
+        )})()}
 
         {/* --- JOINT CREDIT LEDGER (যৌথ বাকির খাতা) VIEW --- */}
         {view === 'joint_baki' && (
@@ -4115,6 +4415,166 @@ export default function GeneralStore({
                 className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-xl cursor-pointer shadow transition-all flex items-center justify-center"
               >
                 বন্ধ করুন
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 15-Day Overdue Defaulters Alert Popup Summary Modal for General Store */}
+      {showStore15DayModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e293b] rounded-3xl overflow-hidden max-w-xl w-full border border-orange-200 dark:border-orange-900/50 shadow-2xl flex flex-col max-h-[90vh] animate-scale-up">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-orange-500 via-rose-500 to-red-600 text-white flex items-start justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
+                  <AlertTriangle size={24} className="animate-bounce text-amber-200" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black tracking-tight">
+                      মুদিখানা: ১৫ দিনের খেলাপি জরুরি অ্যালার্ট
+                    </h3>
+                    <span className="px-2 py-0.5 bg-white text-rose-600 text-[10px] font-black rounded-full shadow-xs">
+                      {toBnNum(store15DayOverdueList.length)} জন
+                    </span>
+                  </div>
+                  <p className="text-xs text-orange-100 mt-1 font-medium leading-relaxed">
+                    এই গ্রাহকরা বিগত ১৫ থেকে ২৯ দিন যাবত কোনো বকেয়া পরিশোধ করেননি। অতিসত্বর তাগাদা প্রদান করুন।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowStore15DayModal(false)}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-xl transition-all cursor-pointer shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Summary Stats Strip */}
+            <div className="p-4 bg-orange-50/70 dark:bg-orange-950/20 border-b border-orange-100 dark:border-orange-900/40 flex items-center justify-between gap-3 shrink-0 font-mono text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-orange-800 dark:text-orange-300 uppercase block font-sans">মোট ১৫ দিনের খেলাপি</span>
+                <strong className="text-base font-black text-orange-950 dark:text-orange-100">{toBnNum(store15DayOverdueList.length)} জন গ্রাহক</strong>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase block font-sans">সর্বমোট বকেয়া পাওনা</span>
+                <strong className="text-base font-black text-rose-600 dark:text-rose-400">
+                  ৳{toBnNum(store15DayOverdueList.reduce((acc, curr) => acc + curr.customer.due, 0).toFixed(2))}
+                </strong>
+              </div>
+            </div>
+
+            {/* Customer Overdue List */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-100 dark:divide-slate-800">
+              {store15DayOverdueList.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs space-y-2">
+                  <CheckCircle size={28} className="mx-auto text-emerald-500" />
+                  <p className="font-bold text-slate-700 dark:text-slate-300">১৫ দিনের খেলাপি ক্যাটাগরিতে কোনো গ্রাহক নেই!</p>
+                </div>
+              ) : (
+                store15DayOverdueList.map(({ customer, kInfo }) => (
+                  <div
+                    key={customer.id}
+                    className="pt-2.5 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    {/* Left info */}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <strong className="text-sm font-black text-slate-900 dark:text-white">{customer.name}</strong>
+                        <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-950/50 text-orange-800 dark:text-orange-300 text-[10px] font-black rounded-md border border-orange-200 dark:border-orange-900/40">
+                          🔥 {toBnNum(kInfo.daysOverdue)} দিন বাকি
+                        </span>
+                      </div>
+                      {customer.phone && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-1">
+                          <Phone size={11} className="text-slate-400" /> {customer.phone}
+                        </p>
+                      )}
+                      {(kInfo.lastPaymentDate || kInfo.dueStartDate) && (
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          সর্বশেষ হিসাব: {kInfo.lastPaymentDate || kInfo.dueStartDate}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right actions */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                      <div className="text-left sm:text-right font-mono shrink-0">
+                        <span className="text-[9px] text-slate-400 block font-sans">বাকি পাওনা</span>
+                        <strong className="text-sm font-black text-rose-600 dark:text-rose-400">৳{toBnNum(customer.due.toFixed(2))}</strong>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {customer.phone && (
+                          <a
+                            href={`https://api.whatsapp.com/send?phone=${
+                              ((customer.phone.replace(/\D/g, '').startsWith('0') ? '88' : '') + customer.phone.replace(/\D/g, ''))
+                            }&text=${encodeURIComponent(
+                              `প্রিয় ${customer.name},\nনাজমুল জেনারেল স্টোরে আপনার বকেয়া বাকির পরিমাণ ৳${toBnNum(customer.due)} টাকা।\nআপনি বিগত ${toBnNum(kInfo.daysOverdue)} দিন যাবত কোনো বকেয়া পরিশোধ করেননি (১৫ দিনের খেলাপি ক্যাটাগরি)।\nঅনুগ্রহ করে অতিসত্বর বকেয়া টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল জেনারেল স্টোর`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl transition-all flex items-center gap-1 shadow-xs"
+                            title="WhatsApp তাগাদা নোটিশ পাঠান"
+                          >
+                            <MessageCircle size={12} /> WhatsApp
+                          </a>
+                        )}
+                        {customer.phone && (
+                          <a
+                            href={`tel:${customer.phone}`}
+                            className="p-1.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-blue-600 dark:text-blue-400 rounded-xl transition-all border border-blue-200 dark:border-blue-900/40"
+                            title="ফোন কল করুন"
+                          >
+                            <Phone size={13} />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerDetails(customer);
+                            setView('credit_ledger');
+                            setShowStore15DayModal(false);
+                            playSound(950, 0.05);
+                          }}
+                          className="px-2.5 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl transition-all cursor-pointer"
+                        >
+                          খাতায় যান
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setView('credit_ledger');
+                  setCreditLedgerTab('khelapi');
+                  setKhelapiFilterCat('15_days');
+                  setShowStore15DayModal(false);
+                  playSound(950, 0.05);
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Flame size={14} /> ১৫ দিনের খেলাপি ফিল্টারে যান
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowStore15DayModal(false)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+              >
+                বুঝেছি / বন্ধ করুন
               </button>
             </div>
 

@@ -151,3 +151,97 @@ export interface StoreDailyLedger {
 export type TelecomCustomerTxn = StoreCustomerTxn;
 export type TelecomCustomer = StoreCustomer;
 
+export interface KhelapiInfo {
+  daysOverdue: number;
+  category: '7_days' | '15_days' | '30_days' | 'none';
+  categoryLabel: string;
+  categoryBadgeClass: string;
+  lastPaymentDate?: string;
+  dueStartDate?: string;
+  lastActivityTimestamp: number;
+}
+
+export function getCustomerKhelapiInfo(customer: { due: number; transactions?: { type?: string; amount?: number; date?: string; timestamp?: number }[] }): KhelapiInfo {
+  if (!customer || customer.due <= 0) {
+    return {
+      daysOverdue: 0,
+      category: 'none',
+      categoryLabel: 'নিয়মিত',
+      categoryBadgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+      lastActivityTimestamp: Date.now()
+    };
+  }
+
+  const txns = customer.transactions || [];
+  
+  // 1. Check if there was any payment received
+  const paymentTxns = txns.filter(
+    t => (t.type === 'payment_received' || t.type === 'payment') && (t.amount || 0) > 0
+  );
+
+  let referenceTimestamp = 0;
+  let lastPaymentDate: string | undefined;
+  let dueStartDate: string | undefined;
+
+  if (paymentTxns.length > 0) {
+    // Latest payment timestamp
+    const latestPayment = paymentTxns.reduce((latest, t) => {
+      const ts = t.timestamp || (t.date ? new Date(t.date).getTime() : 0);
+      const prevTs = latest.timestamp || (latest.date ? new Date(latest.date).getTime() : 0);
+      return ts > prevTs ? t : latest;
+    }, paymentTxns[0]);
+    
+    referenceTimestamp = latestPayment.timestamp || (latestPayment.date ? new Date(latestPayment.date).getTime() : Date.now());
+    lastPaymentDate = latestPayment.date || (latestPayment.timestamp ? new Date(latestPayment.timestamp).toISOString().split('T')[0] : undefined);
+  } else {
+    // If no payment was ever made, look for due creation transactions
+    const dueTxns = txns.filter(
+      t => (t.type === 'sale_due' || t.type === 'due') && (t.amount || 0) > 0
+    );
+    if (dueTxns.length > 0) {
+      // Oldest due transaction timestamp (when the customer started owing money)
+      const oldestDue = dueTxns.reduce((earliest, t) => {
+        const ts = t.timestamp || (t.date ? new Date(t.date).getTime() : Date.now());
+        const prevTs = earliest.timestamp || (earliest.date ? new Date(earliest.date).getTime() : Date.now());
+        return ts < prevTs ? t : earliest;
+      }, dueTxns[0]);
+      referenceTimestamp = oldestDue.timestamp || (oldestDue.date ? new Date(oldestDue.date).getTime() : Date.now());
+      dueStartDate = oldestDue.date || (oldestDue.timestamp ? new Date(oldestDue.timestamp).toISOString().split('T')[0] : undefined);
+    } else {
+      referenceTimestamp = Date.now();
+    }
+  }
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - referenceTimestamp);
+  const daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  let category: '7_days' | '15_days' | '30_days' | 'none' = 'none';
+  let categoryLabel = 'নিয়মিত';
+  let categoryBadgeClass = 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+
+  if (daysOverdue >= 30) {
+    category = '30_days';
+    categoryLabel = '৩০+ দিন খেলাপি';
+    categoryBadgeClass = 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800';
+  } else if (daysOverdue >= 15) {
+    category = '15_days';
+    categoryLabel = '১৫-২৯ দিন খেলাপি';
+    categoryBadgeClass = 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800';
+  } else if (daysOverdue >= 7) {
+    category = '7_days';
+    categoryLabel = '৭-১৪ দিন খেলাপি';
+    categoryBadgeClass = 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
+  }
+
+  return {
+    daysOverdue,
+    category,
+    categoryLabel,
+    categoryBadgeClass,
+    lastPaymentDate,
+    dueStartDate,
+    lastActivityTimestamp: referenceTimestamp
+  };
+}
+

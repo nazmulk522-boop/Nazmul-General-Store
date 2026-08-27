@@ -47,9 +47,31 @@ import {
   Mail,
   Send,
   UserPlus,
-  CheckCircle
+  CheckCircle,
+  AlertTriangle,
+  Clock,
+  Flame,
+  ShieldAlert,
+  Filter,
+  PhoneCall,
+  ChevronRight,
+  Bell,
+  Phone,
+  X
 } from 'lucide-react';
-import { AccountKey, Balances, TransactionActionType, TransactionRecord, PurchaseRecord, CardStock, CardUnit, TelecomCustomer, TelecomCustomerTxn } from './types';
+import { 
+  AccountKey, 
+  Balances, 
+  TransactionActionType, 
+  TransactionRecord, 
+  PurchaseRecord, 
+  CardStock, 
+  CardUnit, 
+  TelecomCustomer, 
+  TelecomCustomerTxn,
+  KhelapiInfo,
+  getCustomerKhelapiInfo
+} from './types';
 import { BANGLADESHI_OPERATORS } from './data';
 import GeneralStore from './components/GeneralStore';
 import { 
@@ -204,14 +226,14 @@ export default function App() {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
     return {
-      cash: 25000,
-      bkash: 8000,
-      nagad: 5000,
-      rocket: 4000,
-      gp: 3000,
-      robi: 2000,
-      airtel: 1500,
-      banglalink: 1500
+      cash: 0,
+      bkash: 0,
+      nagad: 0,
+      rocket: 0,
+      gp: 0,
+      robi: 0,
+      airtel: 0,
+      banglalink: 0
     };
   });
 
@@ -222,10 +244,10 @@ export default function App() {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
     return {
-      gp: { 19: 10, 29: 10, 39: 10, 49: 10 },
-      robi: { 19: 15, 29: 15, 39: 15, 49: 15 },
-      airtel: { 19: 8, 29: 8, 39: 8, 49: 8 },
-      banglalink: { 19: 12, 29: 12, 39: 12, 49: 12 }
+      gp: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      robi: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      airtel: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      banglalink: { 19: 0, 29: 0, 39: 0, 49: 0 }
     };
   });
 
@@ -242,10 +264,10 @@ export default function App() {
     // Migration from existing card_stock
     const savedStock = localStorage.getItem('nazmul_telecom_card_stock');
     let oldStock: CardStock = {
-      gp: { 19: 10, 29: 10, 39: 10, 49: 10 },
-      robi: { 19: 15, 29: 15, 39: 15, 49: 15 },
-      airtel: { 19: 8, 29: 8, 39: 8, 49: 8 },
-      banglalink: { 19: 12, 29: 12, 39: 12, 49: 12 }
+      gp: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      robi: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      airtel: { 19: 0, 29: 0, 39: 0, 49: 0 },
+      banglalink: { 19: 0, 29: 0, 39: 0, 49: 0 }
     };
     if (savedStock) {
       try {
@@ -330,44 +352,7 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
-    // Seed records if empty for active look and feel
-    return [
-      {
-        id: 'TXN-060201',
-        accountKey: 'bkash',
-        actionType: 'cash_out',
-        amount: 5000,
-        amountReceived: 5000,
-        commission: 20, // 4 Tk per 1000
-        phone: '01715888222',
-        trxId: 'BKB729A88Z',
-        timestamp: Date.now() - 1000 * 60 * 60 * 3, // 3 hours ago
-        note: 'ব্যক্তিগত ক্যাশআউট'
-      },
-      {
-        id: 'TXN-060202',
-        accountKey: 'gp',
-        actionType: 'load',
-        amount: 200,
-        amountReceived: 200,
-        commission: 5.4, // 27 Tk per 1000
-        phone: '01305445229',
-        timestamp: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-        note: 'জরুরি লোড'
-      },
-      {
-        id: 'TXN-060203',
-        accountKey: 'robi',
-        actionType: 'minute_card',
-        cardPrice: 29,
-        amount: 28.5,
-        amountReceived: 30,
-        commission: 1.5,
-        phone: '01815234990',
-        timestamp: Date.now() - 1000 * 60 * 45, // 45 mins ago
-        note: 'মিনিট কার্ড বিক্রি'
-      }
-    ];
+    return [];
   });
 
   // State: Purchases history
@@ -385,12 +370,7 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* use default */ }
     }
-    // Seeds for telecom customers to give a nice starting experience
-    return [
-      { id: 'tc1', name: 'রহিম মিঞা (ফ্লেক্সিলোড)', phone: '01711223344', due: 120, transactions: [{ id: 'tt1', type: 'sale_due', amount: 120, date: '2026-07-01', note: 'পূর্বের মোবাইল রিচার্জ বাকি', timestamp: Date.now() }] },
-      { id: 'tc2', name: 'করিম হোসেন (কার্ড)', phone: '01815556677', due: 30, transactions: [{ id: 'tt2', type: 'sale_due', amount: 30, date: '2026-07-01', note: 'মিনিট কার্ড ক্রয় বাকি', timestamp: Date.now() }] },
-      { id: 'tc3', name: 'সজীব আহমেদ (বিকাশ)', phone: '01912345678', due: 200, transactions: [{ id: 'tt3', type: 'sale_due', amount: 200, date: '2026-07-01', note: 'ক্যাশ আউট বাকি', timestamp: Date.now() }] }
-    ];
+    return [];
   });
 
   // State: General Store Customers (Credit ledger) - lifted for "যুক্ত বাকির খাতা"
@@ -399,11 +379,7 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
-    return [
-      { id: 'c1', name: 'রহিম মিঞা (ফ্লেক্সিলোড)', phone: '01711223344', due: 1229, transactions: [{ id: 't1', type: 'sale_due', amount: 1229, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c2', name: 'করিম হোসেন (কার্ড)', phone: '01815556677', due: 311, transactions: [{ id: 't2', type: 'sale_due', amount: 311, date: '2026-07-01', note: 'পূর্বের বকেয়া খাতা', timestamp: Date.now() }] },
-      { id: 'c3', name: 'সজীব আহমেদ (বিকাশ)', phone: '01912345678', due: 50, transactions: [{ id: 't3', type: 'sale_due', amount: 50, date: '2026-07-01', note: 'পূর্বের বকেয়া', timestamp: Date.now() }] }
-    ];
+    return [];
   });
 
   const saveStoreCustomers = (newC: TelecomCustomer[]) => {
@@ -471,6 +447,18 @@ export default function App() {
   const [bakiFormNote, setBakiFormNote] = useState<string>('');
   const [editingBakiCustomer, setEditingBakiCustomer] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
+  const [bakiListTab, setBakiListTab] = useState<'all' | 'khelapi'>('all');
+  const [khelapiCategoryFilter, setKhelapiCategoryFilter] = useState<'all' | '7_days' | '15_days' | '30_days'>('all');
+  const [bakiSearchQuery, setBakiSearchQuery] = useState<string>('');
+  const [show15DayOverdueModal, setShow15DayOverdueModal] = useState<boolean>(false);
+
+  // 15-Day Overdue Defaulters List for Telecom
+  const telecom15DayOverdueList = useMemo(() => {
+    return telecomCustomers
+      .map(c => ({ customer: c, kInfo: getCustomerKhelapiInfo(c) }))
+      .filter(item => item.customer.due > 0 && item.kInfo.category === '15_days')
+      .sort((a, b) => b.kInfo.daysOverdue - a.kInfo.daysOverdue);
+  }, [telecomCustomers]);
 
   // Form Inputs: Joint Due Book
   const [selectedJointCustomerId, setSelectedJointCustomerId] = useState<string | null>(null);
@@ -480,6 +468,8 @@ export default function App() {
   const [jointBakiActionType, setJointBakiActionType] = useState<'due' | 'payment'>('payment');
   const [jointSearch, setJointSearch] = useState<string>('');
   const [jointBakiCopied, setJointBakiCopied] = useState<boolean>(false);
+  const [jointBakiListTab, setJointBakiListTab] = useState<'all' | 'khelapi'>('all');
+  const [jointKhelapiCategoryFilter, setJointKhelapiCategoryFilter] = useState<'all' | '7_days' | '15_days' | '30_days'>('all');
 
   // Form Inputs: Manual Card Stock Edit
   const [showCardEditModal, setShowCardEditModal] = useState<{
@@ -2629,11 +2619,26 @@ export default function App() {
               রিপোর্ট, এক্সপোর্ট ও ক্লাউড
             </button>
             <button
-              onClick={() => { setDashboardTab('baki'); playSound(920, 0.05); }}
-              className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${dashboardTab === 'baki' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
+              onClick={() => {
+                setDashboardTab('baki');
+                if (telecom15DayOverdueList.length > 0) {
+                  setShow15DayOverdueModal(true);
+                }
+                playSound(920, 0.05);
+              }}
+              className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${dashboardTab === 'baki' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               <Wallet size={15} />
-              বাকি খাতা (Due Ledger)
+              <span>বাকি খাতা (Due Ledger)</span>
+              {telecom15DayOverdueList.length > 0 && (
+                <span
+                  className="px-2 py-0.5 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black rounded-full animate-pulse shadow-sm flex items-center gap-1 shrink-0"
+                  title={`${telecom15DayOverdueList.length} জন গ্রাহক ১৫ দিনের খেলাপি ক্যাটাগরিতে রয়েছেন`}
+                >
+                  <AlertTriangle size={11} />
+                  <span>১৫ দিন: {toBengaliNumber(telecom15DayOverdueList.length)}</span>
+                </span>
+              )}
             </button>
             <button
               onClick={() => { setDashboardTab('joint_baki'); playSound(920, 0.05); }}
@@ -3317,122 +3322,418 @@ export default function App() {
           )}
 
           {/* Tab 4: Telecom Credit/Due (Baki) Ledger */}
-          {dashboardTab === 'baki' && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-6">
-              <div className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-extrabold text-sm md:text-base text-slate-800">টেলিকম বাকি খাতা ও কাস্টমার লেজার</h3>
-                  <p className="text-xs text-slate-400">বাকিতে দেওয়া ফ্লেক্সিলোড ও মিনিট কার্ডের হিসাব, জমা পরিশোধ এবং বিস্তারিত রিপোর্ট খাতা</p>
-                </div>
-                {/* Visual indicator of total outstanding due */}
-                <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2 self-start shadow-2xs text-right">
-                  <span className="text-[10px] text-rose-500 font-extrabold block uppercase">সর্বমোট বকেয়া (Total Outstanding)</span>
-                  <strong className="text-xl font-black text-rose-600 font-mono">৳{telecomCustomers.reduce((sum, c) => sum + c.due, 0).toFixed(2)}</strong>
-                </div>
-              </div>
+          {dashboardTab === 'baki' && (() => {
+            // Defaulters calculation for Telecom
+            const telecomWithKhelapi = telecomCustomers.map(c => ({
+              customer: c,
+              kInfo: getCustomerKhelapiInfo(c)
+            }));
 
-              {/* Baki Ledger Workspace */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Left side: Customer selection / search */}
-                <div className="lg:col-span-5 space-y-3">
-                  <div className="text-xs font-black text-slate-500 uppercase tracking-wider block text-left">গ্রাহকদের তালিকা:</div>
-                  
-                  {/* Customer list container */}
-                  <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1">
-                    {telecomCustomers.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400 text-xs">
-                        কোনো বাকি কাস্টমার রেকর্ড নেই।
-                      </div>
-                    ) : (
-                      telecomCustomers.map(cust => {
-                        const isSelected = selectedBakiCustomerId === cust.id;
-                        return (
-                          <div
-                            key={cust.id}
-                            onClick={() => {
-                              setSelectedBakiCustomerId(cust.id);
-                              playSound(1000, 0.05);
-                            }}
-                            className={`p-3 rounded-xl border transition-all cursor-pointer text-left ${isSelected ? 'bg-indigo-50/55 border-indigo-200 ring-2 ring-indigo-500/10' : 'bg-slate-50 hover:bg-slate-100 border-slate-200'}`}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-extrabold text-slate-800 text-xs sm:text-sm">{cust.name}</h4>
-                                <p className="text-[10px] font-mono text-slate-400 font-bold">{cust.phone || 'N/A'}</p>
-                              </div>
-                              <div className="text-right">
-                                <span className={`text-xs font-black font-mono block ${cust.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                  ৳{cust.due}
-                                </span>
-                                <span className="text-[9px] text-slate-400 font-medium">বকেয়া</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
+            const telecomDefaulters = telecomWithKhelapi
+              .filter(item => item.customer.due > 0 && item.kInfo.daysOverdue >= 7)
+              .sort((a, b) => b.kInfo.daysOverdue - a.kInfo.daysOverdue); // যার বাকি যতদিন বেশি তার নাম উপরে থাকবে
+
+            const khelapi7to14 = telecomDefaulters.filter(d => d.kInfo.category === '7_days');
+            const khelapi15to29 = telecomDefaulters.filter(d => d.kInfo.category === '15_days');
+            const khelapi30plus = telecomDefaulters.filter(d => d.kInfo.category === '30_days');
+            const totalKhelapiDue = telecomDefaulters.reduce((sum, d) => sum + d.customer.due, 0);
+
+            const filteredDefaulters = telecomDefaulters.filter(d => {
+              if (khelapiCategoryFilter === '7_days') return d.kInfo.category === '7_days';
+              if (khelapiCategoryFilter === '15_days') return d.kInfo.category === '15_days';
+              if (khelapiCategoryFilter === '30_days') return d.kInfo.category === '30_days';
+              return true;
+            }).filter(d => {
+              if (!bakiSearchQuery.trim()) return true;
+              const q = bakiSearchQuery.toLowerCase();
+              return d.customer.name.toLowerCase().includes(q) || (d.customer.phone && d.customer.phone.includes(q));
+            });
+
+            const filteredAllCustomers = telecomCustomers.filter(c => {
+              if (!bakiSearchQuery.trim()) return true;
+              const q = bakiSearchQuery.toLowerCase();
+              return c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q));
+            });
+
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-5">
+                {/* Header & Overview Stats */}
+                <div className="pb-3 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                      <span>টেলিকম বাকি খাতা ও খেলাপি কাস্টমার ট্র্যাকার</span>
+                      {telecomDefaulters.length > 0 && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-black rounded-full animate-pulse border border-rose-200">
+                          🚨 {toBengaliNumber(telecomDefaulters.length)} জন খেলাপি
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">বাকির হিসাব, ৭/১৫/৩০ দিনের খেলাপি ক্যাটাগরি এবং বকেয়া আদায়ের তাগাদা নোটিশ</p>
                   </div>
 
-                  {/* Manual add customer helper form */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = e.target as HTMLFormElement;
-                      const nameInput = form.elements.namedItem('custName') as HTMLInputElement;
-                      const phoneInput = form.elements.namedItem('custPhone') as HTMLInputElement;
-                      const name = nameInput.value.trim();
-                      const phone = phoneInput.value.trim();
-                      
-                      if (!name) return;
-
-                      // Check if already exists
-                      if (telecomCustomers.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-                        alert('এই নামের কাস্টমার ইতিমধ্যে রয়েছে!');
-                        return;
-                      }
-
-                      const newCust: TelecomCustomer = {
-                        id: `T-CUST-${Date.now()}`,
-                        name,
-                        phone,
-                        due: 0,
-                        transactions: []
-                      };
-
-                      saveTelecomCustomers([newCust, ...telecomCustomers]);
-                      setSelectedBakiCustomerId(newCust.id);
-                      form.reset();
-                      playSound(1200, 0.15, 'sine');
-                    }}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-left"
-                  >
-                    <span className="text-[10px] font-black text-slate-500 uppercase block">+ নতুন গ্রাহক খাতা খুলুন:</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        name="custName"
-                        placeholder="গ্রাহকের নাম"
-                        className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
-                        required
-                      />
-                      <input
-                        type="tel"
-                        name="custPhone"
-                        placeholder="মোবাইল (ঐচ্ছিক)"
-                        className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
-                      />
+                  {/* Summary Metric Badges */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-right">
+                      <span className="text-[9px] text-slate-400 font-bold block uppercase">সর্বমোট বকেয়া</span>
+                      <strong className="text-sm md:text-base font-black text-slate-800 font-mono">৳{toBengaliNumber(telecomCustomers.reduce((sum, c) => sum + c.due, 0).toFixed(2))}</strong>
                     </div>
-                    <button
-                      type="submit"
-                      className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
-                    >
-                      কাস্টমার খাতা সেভ করুন
-                    </button>
-                  </form>
+                    <div className="bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2 text-right">
+                      <span className="text-[9px] text-rose-500 font-extrabold block uppercase">🚨 মোট খেলাপি বকেয়া</span>
+                      <strong className="text-sm md:text-base font-black text-rose-600 font-mono">৳{toBengaliNumber(totalKhelapiDue.toFixed(2))}</strong>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Right side: Selected Customer Detailed Statement & Payment Action */}
-                <div className="lg:col-span-7 space-y-4">
+                {/* 15-Day Overdue Defaulters Alert Banner */}
+                {khelapi15to29.length > 0 && (
+                  <div className="p-3.5 bg-gradient-to-r from-orange-50 to-rose-50 border border-orange-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-orange-100 text-orange-600 rounded-xl shrink-0">
+                        <AlertTriangle size={20} className="animate-bounce" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-orange-950 flex items-center gap-2">
+                          <span>🚨 ১৫ দিনের খেলাপি ক্যাটাগরি সতর্কতা!</span>
+                          <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-black rounded-md">
+                            {toBengaliNumber(khelapi15to29.length)} জন গ্রাহক
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-orange-800 font-medium mt-0.5">
+                          বিগত ১৫-২৯ দিন যাবত কোনো বকেয়া পরিশোধ করেননি (মোট বকেয়া: ৳{toBengaliNumber(khelapi15to29.reduce((acc, d) => acc + d.customer.due, 0).toFixed(2))})। দ্রুত তাগাদা দিন!
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShow15DayOverdueModal(true);
+                          playSound(1000, 0.08);
+                        }}
+                        className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Flame size={13} /> পপআপ সামারি দেখুন
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Tab Navigation: All Customers vs Khelapi Defaulters */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => { setBakiListTab('all'); playSound(950, 0.05); }}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                        bakiListTab === 'all'
+                          ? 'bg-white text-indigo-600 shadow-xs border border-indigo-100'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Users size={14} />
+                      সকল গ্রাহক ({toBengaliNumber(telecomCustomers.length)})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setBakiListTab('khelapi'); playSound(1050, 0.08); }}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                        bakiListTab === 'khelapi'
+                          ? 'bg-rose-600 text-white shadow-md'
+                          : 'text-rose-600 hover:bg-rose-50'
+                      }`}
+                    >
+                      <AlertTriangle size={14} className={telecomDefaulters.length > 0 ? "animate-bounce" : ""} />
+                      খেলাপি কাস্টমার ({toBengaliNumber(telecomDefaulters.length)})
+                    </button>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="relative min-w-[220px]">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="নাম বা ফোন দিয়ে খুঁজুন..."
+                      value={bakiSearchQuery}
+                      onChange={(e) => setBakiSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Khelapi 3-Tier Category Pills & Summary Cards (When in Khelapi Tab) */}
+                {bakiListTab === 'khelapi' && (
+                  <div className="space-y-3 bg-rose-50/40 p-3.5 rounded-2xl border border-rose-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-rose-900 uppercase flex items-center gap-1.5">
+                        <Flame size={13} className="text-rose-600" /> খেলাপি ক্যাটাগরি ফিল্টার:
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-bold">
+                        (সর্বোচ্চ দিন খেলাপি থাকা কাস্টমারদের নাম শীর্ষে থাকবে)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiCategoryFilter('all'); playSound(900, 0.04); }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiCategoryFilter === 'all'
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-rose-200 hover:bg-rose-50'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold opacity-90">সব খেলাপি (৭+ দিন)</div>
+                        <div className="text-sm font-black font-mono mt-0.5">{toBengaliNumber(telecomDefaulters.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiCategoryFilter('7_days'); playSound(900, 0.04); }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiCategoryFilter === '7_days'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-white text-amber-800 border-amber-200 hover:bg-amber-50'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold opacity-90">⚠️ ৭ দিন (৭-১৪ দিন)</div>
+                        <div className="text-sm font-black font-mono mt-0.5">{toBengaliNumber(khelapi7to14.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiCategoryFilter('15_days'); playSound(900, 0.04); }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiCategoryFilter === '15_days'
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
+                            : 'bg-white text-orange-800 border-orange-200 hover:bg-orange-50'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold opacity-90">🚨 ১৫ দিন (১৫-২৯ দিন)</div>
+                        <div className="text-sm font-black font-mono mt-0.5">{toBengaliNumber(khelapi15to29.length)} জন</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setKhelapiCategoryFilter('30_days'); playSound(900, 0.04); }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          khelapiCategoryFilter === '30_days'
+                            ? 'bg-red-700 text-white border-red-700 shadow-xs'
+                            : 'bg-white text-red-800 border-red-200 hover:bg-red-50'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold opacity-90">⛔ ৩০ দিন (৩০+ দিন)</div>
+                        <div className="text-sm font-black font-mono mt-0.5">{toBengaliNumber(khelapi30plus.length)} জন</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Baki Ledger Workspace */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* Left side: Customer selection / list */}
+                  <div className="lg:col-span-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-500 uppercase tracking-wider block text-left">
+                        {bakiListTab === 'khelapi' ? '🚨 খেলাপি কাস্টমার তালিকা:' : '📋 সকল গ্রাহকদের তালিকা:'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {bakiListTab === 'khelapi' ? `${toBengaliNumber(filteredDefaulters.length)} জন তালিকাভুক্ত` : `${toBengaliNumber(filteredAllCustomers.length)} জন`}
+                      </span>
+                    </div>
+                    
+                    {/* Customer list container */}
+                    <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+                      {bakiListTab === 'khelapi' ? (
+                        filteredDefaulters.length === 0 ? (
+                          <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs space-y-2">
+                            <CheckCircle size={24} className="mx-auto text-emerald-500" />
+                            <p className="font-bold text-slate-600">এই ক্যাটাগরিতে কোনো খেলাপি গ্রাহক নেই!</p>
+                            <p className="text-[10px]">সকল গ্রাহক নিয়মিত বকেয়া পরিশোধ করছেন।</p>
+                          </div>
+                        ) : (
+                          filteredDefaulters.map(({ customer: cust, kInfo }) => {
+                            const isSelected = selectedBakiCustomerId === cust.id;
+                            return (
+                              <div
+                                key={cust.id}
+                                onClick={() => {
+                                  setSelectedBakiCustomerId(cust.id);
+                                  playSound(1000, 0.05);
+                                }}
+                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-left ${
+                                  isSelected 
+                                    ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-500/20 shadow-xs' 
+                                    : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-rose-200 shadow-2xs'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <h4 className="font-black text-slate-900 text-xs sm:text-sm">{cust.name}</h4>
+                                      <span className={`px-2 py-0.5 text-[9px] font-black rounded-md border ${kInfo.categoryBadgeClass}`}>
+                                        {kInfo.categoryLabel}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] font-mono text-slate-400 font-bold mt-0.5">{cust.phone || 'মোবাইল নম্বর নেই'}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-xs sm:text-sm font-black font-mono block text-rose-600">
+                                      ৳{toBengaliNumber(cust.due)}
+                                    </span>
+                                    <span className="text-[9px] text-rose-500 font-black">
+                                      🔥 {toBengaliNumber(kInfo.daysOverdue)} দিন অপরিশোধিত
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Quick Defaulter Action Buttons */}
+                                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                  <span className="text-[9px] text-slate-400 font-medium truncate max-w-[130px]">
+                                    রেফারেন্স: {kInfo.referenceDate ? new Date(kInfo.referenceDate).toLocaleDateString('bn-BD') : 'শুরু থেকে'}
+                                  </span>
+
+                                  <div className="flex items-center gap-1">
+                                    {cust.phone && (
+                                      <a
+                                        href={`https://api.whatsapp.com/send?phone=${
+                                          ((cust.phone.replace(/\D/g, '').startsWith('0') ? '88' : '') + cust.phone.replace(/\D/g, ''))
+                                        }&text=${encodeURIComponent(
+                                          `প্রিয় ${cust.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ ৳${toBengaliNumber(cust.due)} টাকা।\nআপনি বিগত ${toBengaliNumber(kInfo.daysOverdue)} দিন যাবত কোনো বকেয়া পরিশোধ করেননি (${kInfo.categoryLabel})।\nঅনুগ্রহ করে অতিসত্বর বকেয়া টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম`
+                                        )}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1 border border-emerald-200"
+                                        title="WhatsApp তাগাদা নোটিশ পাঠান"
+                                      >
+                                        <MessageCircle size={11} /> তাগাদা
+                                      </a>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedBakiCustomerId(cust.id);
+                                        setBakiActionType('payment');
+                                        playSound(1000, 0.05);
+                                      }}
+                                      className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-0.5 border border-indigo-200"
+                                    >
+                                      জমা নিন
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )
+                      ) : (
+                        filteredAllCustomers.length === 0 ? (
+                          <div className="text-center py-8 text-slate-400 text-xs">
+                            কোনো কাস্টমার রেকর্ড নেই।
+                          </div>
+                        ) : (
+                          filteredAllCustomers.map(cust => {
+                            const isSelected = selectedBakiCustomerId === cust.id;
+                            const kInfo = getCustomerKhelapiInfo(cust);
+                            return (
+                              <div
+                                key={cust.id}
+                                onClick={() => {
+                                  setSelectedBakiCustomerId(cust.id);
+                                  playSound(1000, 0.05);
+                                }}
+                                className={`p-3 rounded-xl border transition-all cursor-pointer text-left ${isSelected ? 'bg-indigo-50/55 border-indigo-200 ring-2 ring-indigo-500/10' : 'bg-slate-50 hover:bg-slate-100 border-slate-200'}`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <h4 className="font-extrabold text-slate-800 text-xs sm:text-sm">{cust.name}</h4>
+                                      {cust.due > 0 && kInfo.daysOverdue >= 7 && (
+                                        <span className={`px-1.5 py-0.2 text-[8px] font-black rounded border ${kInfo.categoryBadgeClass}`}>
+                                          {kInfo.categoryLabel}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] font-mono text-slate-400 font-bold">{cust.phone || 'N/A'}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className={`text-xs font-black font-mono block ${cust.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                      ৳{toBengaliNumber(cust.due)}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-medium">
+                                      {cust.due > 0 ? (kInfo.daysOverdue >= 7 ? `🔥 ${toBengaliNumber(kInfo.daysOverdue)} দিন বাকি` : 'বকেয়া') : (cust.due < 0 ? 'অগ্রিম জমা' : 'পরিশোধিত')}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )
+                      )}
+                    </div>
+
+                    {/* Manual add customer helper form */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.target as HTMLFormElement;
+                        const nameInput = form.elements.namedItem('custName') as HTMLInputElement;
+                        const phoneInput = form.elements.namedItem('custPhone') as HTMLInputElement;
+                        const name = nameInput.value.trim();
+                        const phone = phoneInput.value.trim();
+                        
+                        if (!name) return;
+
+                        // Check if already exists
+                        if (telecomCustomers.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                          alert('এই নামের কাস্টমার ইতিমধ্যে রয়েছে!');
+                          return;
+                        }
+
+                        const newCust: TelecomCustomer = {
+                          id: `T-CUST-${Date.now()}`,
+                          name,
+                          phone,
+                          due: 0,
+                          transactions: []
+                        };
+
+                        saveTelecomCustomers([newCust, ...telecomCustomers]);
+                        setSelectedBakiCustomerId(newCust.id);
+                        form.reset();
+                        playSound(1200, 0.15, 'sine');
+                      }}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-left"
+                    >
+                      <span className="text-[10px] font-black text-slate-500 uppercase block">+ নতুন গ্রাহক খাতা খুলুন:</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          name="custName"
+                          placeholder="গ্রাহকের নাম"
+                          className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                          required
+                        />
+                        <input
+                          type="tel"
+                          name="custPhone"
+                          placeholder="মোবাইল (ঐচ্ছিক)"
+                          className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        কাস্টমার খাতা সেভ করুন
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Right side: Selected Customer Detailed Statement & Payment Action */}
+                  <div className="lg:col-span-7 space-y-4">
                   {selectedBakiCustomerId ? (() => {
                     const customer = telecomCustomers.find(c => c.id === selectedBakiCustomerId);
                     if (!customer) return <div className="text-center py-12 text-slate-400 text-xs">গ্রাহকটি খুঁজে পাওয়া যায়নি।</div>;
@@ -3542,6 +3843,49 @@ export default function App() {
                             </div>
                           </div>
                         )}
+
+                        {/* Overdue Alert Banner if Customer is Defaulter */}
+                        {(() => {
+                          const kInfo = getCustomerKhelapiInfo(customer);
+                          if (customer.due > 0 && kInfo.daysOverdue >= 7) {
+                            return (
+                              <div className="p-3 bg-rose-50/90 border border-rose-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-left">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="p-2 bg-rose-100 text-rose-600 rounded-xl shrink-0">
+                                    <AlertTriangle size={18} className="animate-pulse" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-black text-rose-900 flex items-center gap-1.5 flex-wrap">
+                                      <span>খেলাপি গ্রাহক স্ট্যাটাস</span>
+                                      <span className={`px-2 py-0.5 text-[9px] font-black rounded-md border ${kInfo.categoryBadgeClass}`}>
+                                        {kInfo.categoryLabel}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-rose-700 font-medium mt-0.5">
+                                      বিগত <strong>{toBengaliNumber(kInfo.daysOverdue)} দিন</strong> যাবত কোনো বকেয়া পরিশোধ করেননি।
+                                      {(kInfo.lastPaymentDate || kInfo.dueStartDate) && ` (সর্বশেষ হিসাব: ${kInfo.lastPaymentDate || kInfo.dueStartDate})`}
+                                    </p>
+                                  </div>
+                                </div>
+                                {customer.phone && (
+                                  <a
+                                    href={`https://api.whatsapp.com/send?phone=${
+                                      ((customer.phone.replace(/\D/g, '').startsWith('0') ? '88' : '') + customer.phone.replace(/\D/g, ''))
+                                    }&text=${encodeURIComponent(
+                                      `প্রিয় ${customer.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ ৳${toBengaliNumber(customer.due)} টাকা।\nআপনি বিগত ${toBengaliNumber(kInfo.daysOverdue)} দিন যাবত কোনো বকেয়া পরিশোধ করেননি (${kInfo.categoryLabel})।\nঅনুগ্রহ করে অতিসত্বর বকেয়া টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                                  >
+                                    <MessageCircle size={13} /> WhatsApp তাগাদা
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {/* Delete Confirmation Card */}
                         {showDeleteConfirmId === customer.id && (
@@ -3737,7 +4081,7 @@ export default function App() {
               </div>
 
             </div>
-          )}
+          )})()}
 
           {dashboardTab === 'joint_baki' && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
@@ -4403,6 +4747,173 @@ export default function App() {
 
             </motion.div>
 
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 15-Day Overdue Defaulters Alert Popup Summary Modal */}
+      <AnimatePresence>
+        {show15DayOverdueModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.93, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.93, opacity: 0, y: 15 }}
+              className="bg-white rounded-3xl overflow-hidden max-w-xl w-full border border-orange-200 shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-5 bg-gradient-to-r from-orange-500 via-rose-500 to-red-600 text-white flex items-start justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
+                    <AlertTriangle size={24} className="animate-bounce text-amber-200" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base sm:text-lg font-black tracking-tight">
+                        ১৫ দিনের খেলাপি কাস্টমার জরুরি অ্যালার্ট
+                      </h3>
+                      <span className="px-2 py-0.5 bg-white text-rose-600 text-[10px] font-black rounded-full shadow-xs">
+                        {toBengaliNumber(telecom15DayOverdueList.length)} জন
+                      </span>
+                    </div>
+                    <p className="text-xs text-orange-100 mt-1 font-medium leading-relaxed">
+                      এই গ্রাহকরা বিগত ১৫ থেকে ২৯ দিন যাবত কোনো বকেয়া পরিশোধ করেননি। অতিসত্বর তাগাদা প্রদান করুন।
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShow15DayOverdueModal(false)}
+                  className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-xl transition-all cursor-pointer shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Summary Stats Strip */}
+              <div className="p-4 bg-orange-50/70 border-b border-orange-100 flex items-center justify-between gap-3 shrink-0 font-mono text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-orange-800 uppercase block font-sans">মোট ১৫ দিনের খেলাপি</span>
+                  <strong className="text-base font-black text-orange-950">{toBengaliNumber(telecom15DayOverdueList.length)} জন গ্রাহক</strong>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-rose-700 uppercase block font-sans">সর্বমোট বকেয়া পাওনা</span>
+                  <strong className="text-base font-black text-rose-600">
+                    ৳{toBengaliNumber(telecom15DayOverdueList.reduce((acc, curr) => acc + curr.customer.due, 0).toFixed(2))}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Customer Overdue List */}
+              <div className="p-4 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-100">
+                {telecom15DayOverdueList.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs space-y-2">
+                    <CheckCircle size={28} className="mx-auto text-emerald-500" />
+                    <p className="font-bold text-slate-700">১৫ দিনের খেলাপি ক্যাটাগরিতে কোনো গ্রাহক নেই!</p>
+                  </div>
+                ) : (
+                  telecom15DayOverdueList.map(({ customer, kInfo }) => (
+                    <div
+                      key={customer.id}
+                      className="pt-2.5 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      {/* Left info */}
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <strong className="text-sm font-black text-slate-900">{customer.name}</strong>
+                          <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-[10px] font-black rounded-md border border-orange-200">
+                            🔥 {toBengaliNumber(kInfo.daysOverdue)} দিন বাকি
+                          </span>
+                        </div>
+                        {customer.phone && (
+                          <p className="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                            <Phone size={11} className="text-slate-400" /> {customer.phone}
+                          </p>
+                        )}
+                        {(kInfo.lastPaymentDate || kInfo.dueStartDate) && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            সর্বশেষ হিসাব: {kInfo.lastPaymentDate || kInfo.dueStartDate}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Right actions */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                        <div className="text-left sm:text-right font-mono shrink-0">
+                          <span className="text-[9px] text-slate-400 block font-sans">বাকি পাওনা</span>
+                          <strong className="text-sm font-black text-rose-600">৳{toBengaliNumber(customer.due.toFixed(2))}</strong>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {customer.phone && (
+                            <a
+                              href={`https://api.whatsapp.com/send?phone=${
+                                ((customer.phone.replace(/\D/g, '').startsWith('0') ? '88' : '') + customer.phone.replace(/\D/g, ''))
+                              }&text=${encodeURIComponent(
+                                `প্রিয় ${customer.name},\nনাজমুল টেলিকমে আপনার বকেয়া বাকির পরিমাণ ৳${toBengaliNumber(customer.due)} টাকা।\nআপনি বিগত ${toBengaliNumber(kInfo.daysOverdue)} দিন যাবত কোনো বকেয়া পরিশোধ করেননি (১৫ দিনের খেলাপি ক্যাটাগরি)।\nঅনুগ্রহ করে অতিসত্বর বকেয়া টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ!\nনাজমুল টেলিকম`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl transition-all flex items-center gap-1 shadow-xs"
+                              title="WhatsApp তাগাদা নোটিশ পাঠান"
+                            >
+                              <MessageCircle size={12} /> WhatsApp
+                            </a>
+                          )}
+                          {customer.phone && (
+                            <a
+                              href={`tel:${customer.phone}`}
+                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl transition-all border border-blue-200"
+                              title="ফোন কল করুন"
+                            >
+                              <Phone size={13} />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBakiCustomerId(customer.id);
+                              setBakiActionType('payment');
+                              setDashboardTab('baki');
+                              setShow15DayOverdueModal(false);
+                              playSound(950, 0.05);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl transition-all cursor-pointer"
+                          >
+                            খাতায় যান
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDashboardTab('baki');
+                    setBakiListTab('khelapi');
+                    setKhelapiCategoryFilter('15_days');
+                    setShow15DayOverdueModal(false);
+                    playSound(950, 0.05);
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Flame size={14} /> ১৫ দিনের খেলাপি ফিল্টারে যান
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShow15DayOverdueModal(false)}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+                >
+                  বুঝেছি / বন্ধ করুন
+                </button>
+              </div>
+
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
