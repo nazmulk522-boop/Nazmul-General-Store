@@ -543,6 +543,10 @@ export default function App() {
     storeCustomerCount: number;
     foundTelecom: boolean;
     foundStore: boolean;
+    todayTxCount: number;
+    morningTxCount: number;
+    latestTxTime: string | null;
+    earliestTxTime: string | null;
     rawKeys: string[];
   }>({
     scanned: false,
@@ -555,6 +559,10 @@ export default function App() {
     storeCustomerCount: 0,
     foundTelecom: false,
     foundStore: false,
+    todayTxCount: 0,
+    morningTxCount: 0,
+    latestTxTime: null,
+    earliestTxTime: null,
     rawKeys: []
   });
 
@@ -1945,15 +1953,53 @@ export default function App() {
         }
       }
 
-      const txRaw = localStorage.getItem('nazmul_telecom_transactions');
-      const balRaw = localStorage.getItem('nazmul_telecom_balances');
-      const custRaw = localStorage.getItem('nazmul_telecom_customers');
-      const storeProdRaw = localStorage.getItem('nazmul_store_products');
-      const storeCustRaw = localStorage.getItem('nazmul_store_customers');
-      const storeSalesRaw = localStorage.getItem('nazmul_store_sales');
-      const purchasesRaw = localStorage.getItem('nazmul_telecom_purchases');
-      const cardStockRaw = localStorage.getItem('nazmul_telecom_card_stock');
-      const cardUnitsRaw = localStorage.getItem('nazmul_telecom_card_units');
+      let txRaw = localStorage.getItem('nazmul_telecom_transactions');
+      let balRaw = localStorage.getItem('nazmul_telecom_balances');
+      let custRaw = localStorage.getItem('nazmul_telecom_customers');
+      let storeProdRaw = localStorage.getItem('nazmul_store_products');
+      let storeCustRaw = localStorage.getItem('nazmul_store_customers');
+      let storeSalesRaw = localStorage.getItem('nazmul_store_sales');
+      let purchasesRaw = localStorage.getItem('nazmul_telecom_purchases');
+      let cardStockRaw = localStorage.getItem('nazmul_telecom_card_stock');
+      let cardUnitsRaw = localStorage.getItem('nazmul_telecom_card_units');
+
+      // Deep key fallback scanner across all keys in this browser domain
+      if (!txRaw) {
+        for (const k of rawKeys) {
+          const lk = k.toLowerCase();
+          if (lk.includes('transaction') || lk.includes('txn') || lk.includes('history')) {
+            const val = localStorage.getItem(k);
+            if (val && val.startsWith('[')) {
+              txRaw = val;
+              break;
+            }
+          }
+        }
+      }
+      if (!balRaw) {
+        for (const k of rawKeys) {
+          const lk = k.toLowerCase();
+          if (lk.includes('balance')) {
+            const val = localStorage.getItem(k);
+            if (val && val.startsWith('{')) {
+              balRaw = val;
+              break;
+            }
+          }
+        }
+      }
+      if (!custRaw) {
+        for (const k of rawKeys) {
+          const lk = k.toLowerCase();
+          if (lk.includes('customer') || lk.includes('baki')) {
+            const val = localStorage.getItem(k);
+            if (val && val.startsWith('[')) {
+              custRaw = val;
+              break;
+            }
+          }
+        }
+      }
 
       let parsedTx: TransactionRecord[] = [];
       let parsedCust: any[] = [];
@@ -1967,6 +2013,41 @@ export default function App() {
       try { if (storeCustRaw) parsedStoreCust = JSON.parse(storeCustRaw); } catch (e) {}
       try { if (storeSalesRaw) parsedSales = JSON.parse(storeSalesRaw); } catch (e) {}
 
+      let todayTxCount = 0;
+      let morningTxCount = 0;
+      let latestTxTime: string | null = null;
+      let earliestTxTime: string | null = null;
+
+      if (Array.isArray(parsedTx) && parsedTx.length > 0) {
+        const sorted = [...parsedTx].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        const latest = sorted[0];
+        const earliest = sorted[sorted.length - 1];
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const noonOfToday = startOfToday + (12 * 60 * 60 * 1000);
+
+        parsedTx.forEach(t => {
+          if (t.timestamp) {
+            if (t.timestamp >= startOfToday) {
+              todayTxCount++;
+              if (t.timestamp < noonOfToday) {
+                morningTxCount++;
+              }
+            }
+          }
+        });
+
+        if (latest && latest.timestamp) {
+          const lDate = new Date(latest.timestamp);
+          latestTxTime = `${lDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, ${lDate.getDate()}/${lDate.getMonth() + 1}/${lDate.getFullYear()}`;
+        }
+        if (earliest && earliest.timestamp) {
+          const eDate = new Date(earliest.timestamp);
+          earliestTxTime = `${eDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, ${eDate.getDate()}/${eDate.getMonth() + 1}/${eDate.getFullYear()}`;
+        }
+      }
+
       const report = {
         scanned: true,
         totalKeys: rawKeys.length,
@@ -1978,6 +2059,10 @@ export default function App() {
         storeCustomerCount: Array.isArray(parsedStoreCust) ? parsedStoreCust.length : 0,
         foundTelecom: Boolean(txRaw || balRaw || custRaw),
         foundStore: Boolean(storeProdRaw || storeCustRaw || storeSalesRaw),
+        todayTxCount,
+        morningTxCount,
+        latestTxTime,
+        earliestTxTime,
         rawKeys
       };
 
@@ -2116,6 +2201,10 @@ export default function App() {
       alert("কোডটি রিড করা সম্ভব হয়নি। সঠিক কোড কপি হয়েছে কিনা নিশ্চিত করুন।");
     }
   };
+
+  useEffect(() => {
+    scanBrowserStorage(false);
+  }, []);
 
   useEffect(() => {
     if (dashboardTab === 'backup') {
@@ -2509,6 +2598,73 @@ export default function App() {
           </div>
         </div>
       </nav>
+
+      {/* Morning & Browser Memory Status Banner */}
+      {storageScanReport.scanned && (
+        <div className="max-w-7xl mx-auto px-4 mt-3">
+          <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 transition-all text-xs ${
+            storageScanReport.txCount > 0 
+              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200 shadow-2xs' 
+              : 'bg-amber-50/90 border-amber-300 text-amber-950 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200 shadow-2xs'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`p-2 rounded-xl shrink-0 ${
+                storageScanReport.txCount > 0 ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+              }`}>
+                <HardDrive size={16} />
+              </div>
+              <div>
+                <p className="font-extrabold text-xs">
+                  {storageScanReport.txCount > 0 ? (
+                    <>
+                      ✅ ব্রাউজার মেমোরিতে সকাল ও পূর্বের হিসাব সচল রয়েছে (মোট {toBengaliNumber(storageScanReport.txCount)}টি লেনদেন
+                      {storageScanReport.morningTxCount > 0 && <span className="text-emerald-700 dark:text-emerald-400 font-bold">, আজ সকালে {toBengaliNumber(storageScanReport.morningTxCount)}টি</span>}
+                      {storageScanReport.latestTxTime && <span className="text-slate-500 font-normal text-[10px]"> — সর্বশেষ: {storageScanReport.latestTxTime}</span>})
+                    </>
+                  ) : (
+                    <>
+                      ⚠️ এই লিংকের মেমোরিতে ({typeof window !== 'undefined' ? window.location.hostname : 'ডোমেন'}) এখনো ডাটা নেই। আপনি সকালে অন্য লিংকে ছিলেন।
+                    </>
+                  )}
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  {storageScanReport.txCount > 0 
+                    ? 'কোনো জিমেইল বা ড্রাইভ লগইন ছাড়াই ব্রাউজার মেমোরিতে সমস্ত লেনদেন ও বাকি খাতা পাওয়া গেছে।'
+                    : 'আপনি সকালে যে লিংকে ছিলেন (AI Studio বা Vercel লিংক), সেখানে প্রবেশ করলেই সকালের সব হিসাব পেয়ে যাবেন।'
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              {storageScanReport.txCount > 0 ? (
+                <button
+                  onClick={() => {
+                    scanBrowserStorage(true);
+                    playSound(1200, 0.1);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <RotateCcw size={13} />
+                  মেমোরি সিঙ্ক / রিকভার
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMainView('summary');
+                    setDashboardTab('backup');
+                    playSound(1000, 0.05);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Search size={13} />
+                  উদ্ধার ও লিঙ্ক অপশন
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Top-Level High Fidelity Metrics row */}
       {mainView === 'summary' && (
@@ -3767,6 +3923,73 @@ export default function App() {
                       মোট {toBengaliNumber(storageScanReport.totalKeys)}টি কী (Keys)
                     </span>
                   </div>
+                </div>
+
+                {/* Time & Session Audit Metrics */}
+                <div className="bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <Timer size={14} className="text-indigo-600" />
+                      আজকের ও সকালের লেনদেন অডিট (Time Audit):
+                    </span>
+                    <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full font-bold">
+                      {storageScanReport.todayTxCount > 0 ? `আজকে মোট ${toBengaliNumber(storageScanReport.todayTxCount)}টি রেকর্ড` : 'আজকের কোনো রেকর্ড নেই'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">আজ সকালের হিসাব (দুপুরের পূর্বে):</span>
+                      <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold text-sm block mt-0.5">
+                        {toBengaliNumber(storageScanReport.morningTxCount)} টি লেনদেন
+                      </strong>
+                    </div>
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">সর্বশেষ রেকর্ডকৃত সময়:</span>
+                      <strong className="text-slate-800 dark:text-slate-100 font-mono text-xs block mt-0.5">
+                        {storageScanReport.latestTxTime || 'রেকর্ড নেই'}
+                      </strong>
+                    </div>
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">সর্বপ্রথম রেকর্ডকৃত সময়:</span>
+                      <strong className="text-slate-800 dark:text-slate-100 font-mono text-xs block mt-0.5">
+                        {storageScanReport.earliestTxTime || 'রেকর্ড নেই'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {storageScanReport.txCount === 0 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-900 dark:text-amber-200 space-y-1.5">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                        <AlertTriangle size={14} className="shrink-0" />
+                        এই লিংকের ব্রাউজার মেমোরিতে কোনো ডাটা পাওয়া যায়নি! আপনি সকালে সম্ভবত অন্য লিংকে ছিলেন:
+                      </p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        ব্রাউজার সিকিউরিটির নিয়মে প্রতিটি লিংকের (ডোমেন) নিজস্ব আলাদা মেমোরি থাকে। আপনি সকালে নিচের যেকোনো একটি লিংকে হিসাব করে থাকলে সেই লিংকে ঢুকুন:
+                      </p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <a
+                          href="https://ais-dev-3jdaozk2q5e7ulkwpttadn-938426747944.asia-southeast1.run.app"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-amber-800 dark:text-amber-200 font-bold hover:bg-amber-100 text-[11px] shadow-2xs inline-flex items-center gap-1"
+                        >
+                          🔗 AI Studio প্রিভিউ লিংকে চেক করুন
+                        </a>
+                        <a
+                          href="https://nazmulgeneralstore.vercel.app"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-amber-800 dark:text-amber-200 font-bold hover:bg-amber-100 text-[11px] shadow-2xs inline-flex items-center gap-1"
+                        >
+                          🔗 Vercel ডোমেনে চেক করুন
+                        </a>
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        💡 যে লিংকে সকালের হিসাব দেখতে পাবেন, সেখানে গিয়ে শুধু <strong>"ডাটা কোড কপি করুন"</strong> বাটন চাপবেন এবং এখানে এসে <strong>"কোড পেস্ট ও রিস্টোর"</strong> চাপলেই সব চলে আসবে!
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Cross-Domain / Old Link Transfer helper */}
