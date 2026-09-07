@@ -64,7 +64,9 @@ import {
   ShieldCheck,
   Timer,
   RefreshCw,
-  CheckCheck
+  CheckCheck,
+  Database,
+  HardDrive
 } from 'lucide-react';
 import { 
   AccountKey, 
@@ -528,6 +530,38 @@ export default function App() {
   });
   const [autoBackupCountdown, setAutoBackupCountdown] = useState<string>('');
   const [autoBackupToast, setAutoBackupToast] = useState<{ message: string; timestamp: number } | null>(null);
+
+  // Browser Storage Deep Scanner & Auto-Rescue state
+  const [storageScanReport, setStorageScanReport] = useState<{
+    scanned: boolean;
+    totalKeys: number;
+    approxSizeKB: number;
+    txCount: number;
+    customerCount: number;
+    storeProductCount: number;
+    storeSalesCount: number;
+    storeCustomerCount: number;
+    foundTelecom: boolean;
+    foundStore: boolean;
+    rawKeys: string[];
+  }>({
+    scanned: false,
+    totalKeys: 0,
+    approxSizeKB: 0,
+    txCount: 0,
+    customerCount: 0,
+    storeProductCount: 0,
+    storeSalesCount: 0,
+    storeCustomerCount: 0,
+    foundTelecom: false,
+    foundStore: false,
+    rawKeys: []
+  });
+
+  const [deepScanMessage, setDeepScanMessage] = useState<string | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
+  const [transferCodeInput, setTransferCodeInput] = useState<string>('');
+  const [transferCodeCopied, setTransferCodeCopied] = useState<boolean>(false);
 
   // Load backups list helper
   const loadDriveBackupsList = async () => {
@@ -1896,6 +1930,198 @@ export default function App() {
     };
     reader.readAsText(file);
   };
+
+  // Browser Storage Deep Scanner & Force Rescue
+  const scanBrowserStorage = (forceReapply: boolean = false) => {
+    try {
+      let totalSize = 0;
+      const rawKeys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          rawKeys.push(key);
+          const val = localStorage.getItem(key) || '';
+          totalSize += key.length + val.length;
+        }
+      }
+
+      const txRaw = localStorage.getItem('nazmul_telecom_transactions');
+      const balRaw = localStorage.getItem('nazmul_telecom_balances');
+      const custRaw = localStorage.getItem('nazmul_telecom_customers');
+      const storeProdRaw = localStorage.getItem('nazmul_store_products');
+      const storeCustRaw = localStorage.getItem('nazmul_store_customers');
+      const storeSalesRaw = localStorage.getItem('nazmul_store_sales');
+      const purchasesRaw = localStorage.getItem('nazmul_telecom_purchases');
+      const cardStockRaw = localStorage.getItem('nazmul_telecom_card_stock');
+      const cardUnitsRaw = localStorage.getItem('nazmul_telecom_card_units');
+
+      let parsedTx: TransactionRecord[] = [];
+      let parsedCust: any[] = [];
+      let parsedProd: any[] = [];
+      let parsedStoreCust: any[] = [];
+      let parsedSales: any[] = [];
+
+      try { if (txRaw) parsedTx = JSON.parse(txRaw); } catch (e) {}
+      try { if (custRaw) parsedCust = JSON.parse(custRaw); } catch (e) {}
+      try { if (storeProdRaw) parsedProd = JSON.parse(storeProdRaw); } catch (e) {}
+      try { if (storeCustRaw) parsedStoreCust = JSON.parse(storeCustRaw); } catch (e) {}
+      try { if (storeSalesRaw) parsedSales = JSON.parse(storeSalesRaw); } catch (e) {}
+
+      const report = {
+        scanned: true,
+        totalKeys: rawKeys.length,
+        approxSizeKB: Math.round((totalSize / 1024) * 10) / 10,
+        txCount: Array.isArray(parsedTx) ? parsedTx.length : 0,
+        customerCount: Array.isArray(parsedCust) ? parsedCust.length : 0,
+        storeProductCount: Array.isArray(parsedProd) ? parsedProd.length : 0,
+        storeSalesCount: Array.isArray(parsedSales) ? parsedSales.length : 0,
+        storeCustomerCount: Array.isArray(parsedStoreCust) ? parsedStoreCust.length : 0,
+        foundTelecom: Boolean(txRaw || balRaw || custRaw),
+        foundStore: Boolean(storeProdRaw || storeCustRaw || storeSalesRaw),
+        rawKeys
+      };
+
+      setStorageScanReport(report);
+
+      if (forceReapply) {
+        if (balRaw) {
+          try { saveBalances(JSON.parse(balRaw)); } catch (e) {}
+        }
+        if (txRaw && Array.isArray(parsedTx) && parsedTx.length > 0) {
+          saveTransactions(parsedTx);
+        }
+        if (custRaw && Array.isArray(parsedCust)) {
+          saveTelecomCustomers(parsedCust);
+        }
+        if (purchasesRaw) {
+          try { savePurchases(JSON.parse(purchasesRaw)); } catch (e) {}
+        }
+        if (cardUnitsRaw) {
+          try { saveCardUnits(JSON.parse(cardUnitsRaw)); } catch (e) {}
+        } else if (cardStockRaw) {
+          try { reconstructCardUnitsFromStock(JSON.parse(cardStockRaw)); } catch (e) {}
+        }
+        if (storeCustRaw && Array.isArray(parsedStoreCust)) {
+          saveStoreCustomers(parsedStoreCust);
+        }
+
+        playSound(1400, 0.2, 'sine');
+        setDeepScanMessage(`সফলভাবে ব্রাউজার স্টোরেজ উদ্ধার হয়েছে! (${toBengaliNumber(report.txCount)}টি লেনদেন, ${toBengaliNumber(report.customerCount)}টি কাস্টমার ও স্টোর ডাটা লোড করা হয়েছে)`);
+        setTimeout(() => setDeepScanMessage(null), 8000);
+      }
+    } catch (err: any) {
+      console.error("Storage scan error:", err);
+      setDeepScanMessage("স্টোরেজ স্ক্যান করতে সমস্যা হয়েছে।");
+    }
+  };
+
+  // Cross-Domain Quick Transfer Code Generator
+  const generateTransferCode = () => {
+    try {
+      const storeProducts = JSON.parse(localStorage.getItem('nazmul_store_products') || '[]');
+      const storeSales = JSON.parse(localStorage.getItem('nazmul_store_sales') || '[]');
+      const storeDailyLedgers = JSON.parse(localStorage.getItem('nazmul_store_daily_ledgers') || '[]');
+      const storePin = localStorage.getItem('nazmul_store_pin') || '';
+
+      const packageData = {
+        isFullBackup: true,
+        telecom: {
+          balances,
+          transactions,
+          purchases,
+          cardStock,
+          cardUnits,
+          telecomCustomers,
+          commissionOffset,
+          volumeOffset
+        },
+        generalStore: {
+          products: storeProducts,
+          customers: storeCustomers,
+          sales: storeSales,
+          daily_ledgers: storeDailyLedgers,
+          pin: storePin
+        },
+        timestamp: Date.now()
+      };
+
+      const jsonStr = JSON.stringify(packageData);
+      const base64Code = btoa(encodeURIComponent(jsonStr));
+      return base64Code;
+    } catch (err) {
+      return '';
+    }
+  };
+
+  const copyTransferCode = () => {
+    const code = generateTransferCode();
+    if (!code) {
+      alert("ডাটা কোড তৈরি করতে সমস্যা হয়েছে!");
+      return;
+    }
+    navigator.clipboard.writeText(code).then(() => {
+      setTransferCodeCopied(true);
+      playSound(1200, 0.15, 'sine');
+      setTimeout(() => setTransferCodeCopied(false), 4000);
+    }).catch(() => {
+      prompt("নিচের কোডটি কপি করে নিন:", code);
+    });
+  };
+
+  const handleApplyTransferCode = (codeStr: string) => {
+    if (!codeStr.trim()) {
+      alert("দয়া করে ট্রান্সফার কোডটি পেস্ট করুন।");
+      return;
+    }
+    try {
+      let jsonStr = '';
+      try {
+        jsonStr = decodeURIComponent(atob(codeStr.trim()));
+      } catch (e) {
+        jsonStr = codeStr.trim();
+      }
+      const data = JSON.parse(jsonStr);
+      if (data.isFullBackup && data.telecom && data.generalStore) {
+        // Restore telecom
+        const t = data.telecom;
+        if (t.balances) saveBalances(t.balances);
+        if (t.cardUnits) saveCardUnits(t.cardUnits);
+        else if (t.cardStock) reconstructCardUnitsFromStock(t.cardStock);
+        if (t.transactions) saveTransactions(t.transactions);
+        if (t.purchases) savePurchases(t.purchases);
+        if (t.telecomCustomers) saveTelecomCustomers(t.telecomCustomers);
+        if (typeof t.commissionOffset === 'number') saveCommissionOffset(t.commissionOffset);
+        if (typeof t.volumeOffset === 'number') saveVolumeOffset(t.volumeOffset);
+
+        // Restore store
+        const gs = data.generalStore;
+        if (gs.products) localStorage.setItem('nazmul_store_products', JSON.stringify(gs.products));
+        if (gs.customers) {
+          saveStoreCustomers(gs.customers);
+          localStorage.setItem('nazmul_store_customers', JSON.stringify(gs.customers));
+        }
+        if (gs.sales) localStorage.setItem('nazmul_store_sales', JSON.stringify(gs.sales));
+        if (gs.daily_ledgers) localStorage.setItem('nazmul_store_daily_ledgers', JSON.stringify(gs.daily_ledgers));
+        if (gs.pin) localStorage.setItem('nazmul_store_pin', gs.pin);
+
+        setShowTransferModal(false);
+        setTransferCodeInput('');
+        playSound(1500, 0.3, 'sine');
+        alert("🎉 অভিনন্দন! ট্রান্সফার কোড থেকে সমস্ত টেলিকম ও জেনারেল স্টোরের ডাটা সফলভাবে যুক্ত হয়েছে!");
+        window.location.reload();
+      } else {
+        alert("ভুল বা অসম্পূর্ণ ট্রান্সফার কোড! দয়া করে সঠিক কোড দিন।");
+      }
+    } catch (err) {
+      alert("কোডটি রিড করা সম্ভব হয়নি। সঠিক কোড কপি হয়েছে কিনা নিশ্চিত করুন।");
+    }
+  };
+
+  useEffect(() => {
+    if (dashboardTab === 'backup') {
+      scanBrowserStorage(false);
+    }
+  }, [dashboardTab]);
 
   // Delete transaction record with verification sound
   const handleDeleteTransaction = (id: string) => {
@@ -3442,6 +3668,135 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* BROWSER STORAGE AUTO-DETECTOR & RESCUE PANEL */}
+              <div className="bg-linear-to-r from-blue-900/10 via-indigo-900/5 to-cyan-900/10 p-4 sm:p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/60 space-y-4 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md">
+                      <HardDrive size={22} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                          ব্রাউজার লোকাল স্টোরেজ স্ক্যানার ও অটো-রিকভারি
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                          {typeof window !== 'undefined' ? window.location.hostname : 'Local'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                        গুগল লগইন ছাড়াই আপনার বর্তমান ব্রাউজারের মেমোরিতে থাকা সমস্ত লেনদেন, বাকি খাতা ও পণ্যের হিসাব অটোমেটিক খুঁজে বের করুন।
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => scanBrowserStorage(true)}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                      title="ব্রাউজার মেমোরির ডাটা স্ক্রিনে রিলোড করুন"
+                    >
+                      <RotateCcw size={13} />
+                      ফোর্স রিকভার / সিঙ্ক
+                    </button>
+                    <button
+                      onClick={() => {
+                        scanBrowserStorage(false);
+                        playSound(1000, 0.05);
+                      }}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Search size={13} />
+                      পুনরায় স্ক্যান
+                    </button>
+                  </div>
+                </div>
+
+                {/* Deep Scan Success/Status Toast message */}
+                {deepScanMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl flex items-center gap-2 text-xs font-bold"
+                  >
+                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                    <span>{deepScanMessage}</span>
+                  </motion.div>
+                )}
+
+                {/* Storage Scan Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 font-bold block">টেলিকম লেনদেন রেকর্ড</span>
+                    <span className="text-base sm:text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                      {toBengaliNumber(storageScanReport.txCount)} টি
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {storageScanReport.txCount > 0 ? '✅ মেমোরিতে সংরক্ষিত' : '০টি রেকর্ড'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 font-bold block">টেলিকম বাকি খাতা</span>
+                    <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                      {toBengaliNumber(storageScanReport.customerCount)} জন
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {storageScanReport.customerCount > 0 ? '✅ গ্রাহক তালিকা সচল' : '০ জন গ্রাহক'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 font-bold block">জেনারেল স্টোর পণ্য ও বাকি</span>
+                    <span className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
+                      {toBengaliNumber(storageScanReport.storeProductCount)} পণ্য / {toBengaliNumber(storageScanReport.storeCustomerCount)} বাকি
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {storageScanReport.storeProductCount > 0 ? '✅ স্টোর ডাটা সচল' : '০টি পণ্য'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 font-bold block">ব্যবহৃত ব্রাউজার মেমোরি</span>
+                    <span className="text-base sm:text-lg font-black text-slate-700 dark:text-slate-300 font-mono">
+                      {toBengaliNumber(storageScanReport.approxSizeKB)} KB
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      মোট {toBengaliNumber(storageScanReport.totalKeys)}টি কী (Keys)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cross-Domain / Old Link Transfer helper */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-indigo-50/70 dark:bg-indigo-950/30 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60">
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-amber-500 shrink-0" />
+                      আগের লিংক বা অন্য ব্রাউজার থেকে ডাটা ট্রান্সফার করতে চান?
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      ব্রাউজার সিকিউরিটির জন্য এক লিংকের মেমোরি অন্য লিংক সরাসরি পড়তে পারে না। আপনি ট্রান্সফার কোড দিয়ে ১ ক্লিকে সব নিয়ে আসতে পারেন।
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={copyTransferCode}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                    >
+                      <Copy size={13} />
+                      {transferCodeCopied ? "কোড কপি হয়েছে!" : "ডাটা কোড কপি করুন"}
+                    </button>
+                    <button
+                      onClick={() => setShowTransferModal(true)}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                    >
+                      <Plus size={13} />
+                      কোড পেস্ট ও রিস্টোর
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Error warning display */}
@@ -5467,6 +5822,84 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Cross-Domain Quick Transfer Code Modal */}
+      <AnimatePresence>
+        {showTransferModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 rounded-xl">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white">ডাটা ট্রান্সফার কোড পেস্ট ও রিস্টোর</h3>
+                    <p className="text-[10px] text-slate-400">অন্য ডিভাইস বা পুরোনো লিংক থেকে কপি করা কোড এখানে দিন</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setTransferCodeInput('');
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                  কপি করা ডাটা কোডটি এখানে পেস্ট করুন:
+                </label>
+                <textarea
+                  value={transferCodeInput}
+                  onChange={(e) => setTransferCodeInput(e.target.value)}
+                  placeholder="পূর্বের লিংক থেকে 'ডাটা কোড কপি করুন' চেপে এখানে পেস্ট (Ctrl+V) করুন..."
+                  rows={5}
+                  className="w-full p-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-300 space-y-1 font-medium">
+                <p className="font-bold flex items-center gap-1">
+                  💡 কোনো জিমেইল বা ড্রাইভ লগইন দরকার নেই:
+                </p>
+                <p>
+                  এই কোড দিয়ে তাৎক্ষণিকভাবে নাজমুল টেলিকম ও জেনারেল স্টোরের সম্পূর্ণ খাতা ও পণ্য এই ব্রাউজারে ট্রান্সফার হয়ে যাবে।
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setTransferCodeInput('');
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyTransferCode(transferCodeInput)}
+                  disabled={!transferCodeInput.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-xs font-bold text-white transition-all cursor-pointer shadow-md"
+                >
+                  ১ ক্লিকে রিস্টোর করুন
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
